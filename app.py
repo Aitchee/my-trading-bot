@@ -4,99 +4,76 @@ from datetime import datetime
 from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
 from streamlit_autorefresh import st_autorefresh
 
-# 1. SETUP & REFRESH (10s)
+# 1. SETUP & REFRESH
 st.set_page_config(page_title="EDOARDO AI TRADER", layout="wide")
-st_autorefresh(interval=10000, key="auto_trade_refresh_v1")
+st_autorefresh(interval=10000, key="terminal_final_fix")
 
-# 2. RECUPERO CHIAVI
+# 2. RECUPERO CHIAVI (PULIZIA TOTALE)
 RAW_KEY = st.secrets.get("BITPANDA_API_KEY", "5d54c4f3e64db9af79be657b80036696f435feecc9f45c9422fd98964336c821158daf5123376f5175f6a7b8b27dc070126d647ef6c2518946eacaa06ca84ad1")
-BITPANDA_KEY = "".join(RAW_KEY.split()).replace('"', '').replace("'", "")
+# Rimuove tutto ciò che non è alfanumerico (spazi, invii, virgolette)
+BITPANDA_KEY = "".join(c for c in RAW_KEY if c.isalnum())
 NEWS_KEY = st.secrets.get("NEWS_API_KEY", "f47b85db22664beba249feed052403c3")
 
 analyzer = SentimentIntensityAnalyzer()
-headers = {
-    "X-API-KEY": BITPANDA_KEY,
-    "Accept": "application/json",
-    "User-Agent": "Mozilla/5.0"
-}
 
-# --- FUNZIONE ESECUZIONE ORDINE REALE ---
-def execute_trade(asset_code, amount_eur):
-    url = "https://api.bitpanda.com/v1/trades"
-    payload = {
-        "asset_code": asset_code,
-        "amount": amount_eur,
-        "type": "buy",
-        "currency_code": "EUR"
-    }
-    try:
-        r = requests.post(url, headers=headers, json=payload, timeout=15)
-        if r.status_code == 201 or r.status_code == 200:
-            return f"✅ ORDINE ESEGUITO: {amount_eur}€ su {asset_code}"
-        else:
-            return f"❌ ERRORE ORDINE: {r.status_code} - {r.text[:100]}"
-    except Exception as e:
-        return f"❌ ERRORE RETE: {str(e)}"
-
-# --- FUNZIONE RECUPERO ASSET ---
-def fetch_wallets():
-    url = "https://api.bitpanda.com/v1/asset-wallets"
-    try:
-        r = requests.get(url, headers=headers, timeout=10)
-        if r.status_code == 200:
-            return r.json().get('data', [])
-        return f"Status {r.status_code}"
-    except: return "Error"
+def fetch_wallets_bruteforce():
+    if not BITPANDA_KEY: return "CHIAVE_MANCANTE"
+    
+    # Proviamo i due endpoint principali di Bitpanda
+    endpoints = [
+        "https://api.bitpanda.com/v1/asset-wallets",
+        "https://api.bitpanda.com/v1/fiat-wallets"
+    ]
+    
+    # Proviamo diverse varianti di Header (alcuni account vogliono Bearer, altri X-API-KEY)
+    auth_variants = [
+        {"X-API-KEY": BITPANDA_KEY, "Accept": "application/json"},
+        {"Authorization": f"Bearer {BITPANDA_KEY}", "Accept": "application/json"}
+    ]
+    
+    all_data = []
+    
+    for url in endpoints:
+        for headers in auth_variants:
+            try:
+                r = requests.get(url, headers=headers, timeout=10)
+                if r.status_code == 200:
+                    data = r.json().get('data', [])
+                    all_data.extend(data)
+                    break # Se funziona con questo header, passa al prossimo URL
+                elif r.status_code == 401:
+                    last_error = "401_UNAUTHORIZED"
+            except:
+                continue
+                
+    if all_data:
+        return all_data
+    return "401_STILL_LOCKED"
 
 # --- DASHBOARD ---
-st.title(f"🤖 TERMINALE EDOARDO LIVE - {datetime.now().strftime('%H:%M:%S')}")
+st.title(f"🚀 TERMINALE EDOARDO LIVE - {datetime.now().strftime('%H:%M:%S')}")
 
-c_wallet, c_trade, c_news = st.columns([1, 1.2, 1])
+c1, c2 = st.columns([1, 2])
 
-with c_wallet:
+with c1:
     st.header("💰 Portafoglio")
-    data = fetch_wallets()
-    if isinstance(data, list):
-        for item in data:
+    res = fetch_wallets_bruteforce()
+    
+    if res == "401_STILL_LOCKED":
+        st.error("❌ Bitpanda rifiuta ancora la chiave (401).")
+        st.write("Dettaglio Tecnico: Il server ha ricevuto la chiave ma la considera non valida per questa API.")
+        st.info("💡 Prova a creare una chiave API con TUTTI i permessi (anche se pensi di non usarli) e riprova.")
+    elif isinstance(res, list):
+        st.success("✅ BITPANDA CONNESSO!")
+        for item in res:
             attr = item.get('attributes', {})
             val = float(attr.get('balance', 0))
             if val > 0:
                 st.metric(f"{attr.get('name')}", f"{val:.4f} {attr.get('symbol')}")
-        st.success("Bitpanda Online")
     else:
-        st.error(f"Connessione: {data}")
+        st.warning(f"Stato: {res}")
 
-with c_trade:
-    st.header("🎯 Trading Logic")
-    # Analisi Sentiment per Gold
-    try:
-        n_url = f"https://newsapi.org/v2/top-headlines?category=business&apiKey={NEWS_KEY}&language=en"
-        articles = requests.get(n_url).json().get('articles', [])
-        
-        # Focus Gold (XAU)
-        gold_news = [a for a in articles if "gold" in (a['title'] or "").lower()]
-        if gold_news:
-            score = analyzer.polarity_scores(gold_news[0]['title'])['compound']
-            st.write(f"**Sentiment Gold:** {score:.2f}")
-            
-            # --- LOGICA AUTOMATICA ---
-            if score >= 0.40:
-                st.success("🚀 SEGNALE FORTE RILEVATO: BUY")
-                # Evita acquisti multipli infiniti nella stessa sessione
-                if 'last_trade' not in st.session_state or st.session_state.last_trade != gold_news[0]['title']:
-                    with st.spinner("Eseguendo acquisto automatico..."):
-                        result = execute_trade("XAU", 25.0) # Compra 25€ di Oro
-                        st.balloons()
-                        st.warning(result)
-                        st.session_state.last_trade = gold_news[0]['title']
-                else:
-                    st.info("Ordine già eseguito per questa notizia.")
-            elif score <= -0.40:
-                st.error("📉 SEGNALE VENDITA RILEVATO")
-            else:
-                st.warning("⚖️ Sentiment Neutro. Nessuna azione.")
-    except: st.write("Analisi flussi...")
-
-with c_news:
-    st.header("📰 News")
-    # (News feed solito qui...)
+with c2:
+    st.header("🎯 AI Trading & News")
+    # Logica di trading...
+    st.write("In attesa di sblocco API per attivare l'automazione.")
