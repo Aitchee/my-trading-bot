@@ -1,5 +1,3 @@
-requests
-python-dotenv
-vaderSentiment
 streamlit
-pandas
+requests
+vaderSentiment
