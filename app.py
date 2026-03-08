@@ -1,75 +1,90 @@
 import streamlit as st
 import requests
-import time
+import datetime
 
-# --- CONFIGURAZIONE ---
+# --- 1. CONFIGURAZIONE PAGINA ---
 st.set_page_config(page_title="AI Terminal PRO", layout="wide")
 
-# Il tuo link Google Bridge
+# Link Google Bridge Fisso
 GOOGLE_BRIDGE_URL = "https://script.google.com/macros/s/AKfycbxO6mmU9uVUqTKtlmR9cIhJRB7B8jn9dPXwXnvRWVV4xPB2a_jAB0y9r_j61Nji1xTXHQ/exec"
 
+# --- 2. FUNZIONE RECUPERO DATI ---
 def recupera_dati():
     try:
-        r = requests.get(GOOGLE_BRIDGE_URL, timeout=20)
+        # Timeout ridotto per non bloccare l'app
+        r = requests.get(GOOGLE_BRIDGE_URL, timeout=10)
         if r.status_code == 200:
             return r.json().get('data', []), 200
         return [], r.status_code
-    except:
-        return [], "Errore Bridge"
+    except Exception as e:
+        return [], "Timeout/Errore"
 
-# --- INTERFACCIA ---
+# --- 3. INTERFACCIA ---
 st.title("🚀 AI Financial Terminal")
-st.caption(f"Status Live | Portfolio Scanner | {time.strftime('%H:%M:%S')}")
+col_header_1, col_header_2 = st.columns([3, 1])
+
+with col_header_1:
+    st.caption(f"Ultimo aggiornamento: {datetime.datetime.now().strftime('%H:%M:%S')}")
+with col_header_2:
+    if st.button("🔄 AGGIORNA DATI"):
+        st.rerun()
+
+st.divider()
 
 col_sx, col_cx, col_dx = st.columns([1.3, 1, 1.2])
 
+# --- COLONNA 1: PORTAFOGLIO ---
 with col_sx:
-    st.subheader("💰 Portafoglio & Performance")
-    data, status = recupera_dati()
+    st.subheader("💰 Portafoglio")
+    with st.spinner('Caricamento asset...'):
+        data, status = recupera_dati()
     
     if status == 200 and len(data) > 0:
-        st.success(f"✅ Dati ricevuti: {len(data)} asset trovati")
-        
-        # 1. Liquidità Euro
+        # Liquidità Euro
         for w in data:
             attr = w.get('attributes', {})
             if attr.get('symbol') == 'EUR':
-                st.metric("Liquidità Cash", f"{float(attr.get('balance', 0)):.2f} €")
+                bal = float(attr.get('balance', 0))
+                st.metric("Liquidità Cash", f"{bal:.2f} €")
         
         st.divider()
-        st.write("### Azioni & Asset Legacy")
+        st.write("### I Tuoi Titoli")
         
+        found = False
         for w in data:
             attr = w.get('attributes', {})
             qty = float(attr.get('balance', 0) or 0)
             symbol = attr.get('symbol')
             
             if qty > 0 and symbol != 'EUR':
-                # Nomi reali dai tuoi screenshot
-                nomi = {"LDO": "Leonardo", "ISP": "Intesa Sanpaolo", "AMZN": "Amazon", "NVDA": "NVIDIA", "AAPL": "Apple", "MSFT": "Microsoft"}
+                found = True
+                nomi = {"LDO": "Leonardo", "ISP": "Intesa Sanpaolo", "AMZN": "Amazon", "NVDA": "NVIDIA", "AAPL": "Apple"}
                 nome_asset = nomi.get(symbol, symbol)
-                pmc = float(attr.get('average_price', 0)) # Prezzo Medio Carico
+                pmc = float(attr.get('average_price', 0))
                 
                 with st.container():
                     st.write(f"**{nome_asset}** ({symbol})")
-                    # Calcolo indicativo valore (Qty * Pmc)
                     valore = qty * pmc if pmc > 0 else 0
-                    st.metric(label="Valore Stimato", value=f"{valore:.2f} €" if valore > 0 else "N/D", delta=f"Quantità: {qty:.4f}")
+                    st.metric(label="Dettaglio", value=f"{qty:.4f} Q.tà", delta=f"{valore:.2f} €" if valore > 0 else None)
                     if pmc > 0: st.caption(f"Prezzo Medio Carico: {pmc:.2f} €")
                     st.divider()
+        if not found:
+            st.info("Nessun titolo azionario rilevato.")
     else:
-        st.warning("In attesa di dati reali...")
-        st.info("💡 Se hai fatto 'Nuova Versione' su Google, attendi il prossimo refresh.")
+        st.error(f"⚠️ Status: {status}")
+        st.info("Se non vedi dati, assicurati di aver fatto 'Nuova Versione' su Google Script.")
 
+# --- COLONNA 2: SEGNALI AI ---
 with col_cx:
-    st.subheader("🎯 Segnali AI Top 10")
-    for a in ["Leonardo", "Intesa SP", "Amazon", "NVIDIA", "Apple"]:
+    st.subheader("🎯 Segnali AI")
+    for a in ["Leonardo", "Intesa SP", "Amazon", "NVIDIA"]:
         with st.expander(f"Analisi {a}"):
             st.write("Sentiment: **RIALZISTA**")
             st.button(f"Analisi {a}", key=f"btn_{a}")
 
+# --- COLONNA 3: GRAFICO ---
 with col_dx:
-    st.subheader("📊 Analisi Tecnica Leonardo")
+    st.subheader("📊 Analisi Tecnica")
     st.components.v1.html("""
         <div style="height:450px;">
         <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
@@ -78,6 +93,3 @@ with col_dx:
         </script>
         </div>
     """, height=460)
-
-time.sleep(60)
-st.rerun()
