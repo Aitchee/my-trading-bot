@@ -2,17 +2,46 @@ import streamlit as st
 import requests
 import time
 
-st.set_page_config(page_title="AI Trading Terminal", layout="wide")
+st.set_page_config(page_title="AI Trading Bot PRO", layout="wide")
 
 # --- RECUPERO CHIAVI ---
 try:
     BP_KEY = st.secrets["BITPANDA_API_KEY"]
+    ET_KEY = st.secrets["ETORO_API_KEY"]
     NW_KEY = st.secrets["NEWS_API_KEY"]
 except Exception:
     st.error("❌ Errore API: Controlla i Secrets!")
     st.stop()
 
-# --- LOGICA AI AVANZATA ---
+# --- SIDEBAR: CENTRO DI COMANDO ---
+st.sidebar.title("🎮 Comando Automazione")
+st.sidebar.divider()
+
+# 1. Saldo Contanti (Simulato o via API se disponibile)
+saldo = st.sidebar.status("💰 Saldo Disponibile")
+saldo.write("Bitpanda: **450,00 €**")
+saldo.write("eToro: **1.200,00 $**")
+
+st.sidebar.divider()
+
+# 2. Attivazione Automazione
+st.sidebar.subheader("⚙️ Impostazioni")
+auto_bitpanda = st.sidebar.toggle("Attiva Automazione Bitpanda", value=False)
+auto_etoro = st.sidebar.toggle("Attiva Automazione eToro", value=False)
+
+if st.sidebar.button("🚀 ATTIVA TUTTO", type="primary"):
+    auto_bitpanda = True
+    auto_etoro = True
+    st.sidebar.success("Sistemi Armati!")
+
+st.sidebar.divider()
+
+# 3. Parametri di Rischio (Suggerimento Extra)
+st.sidebar.subheader("🛡️ Gestione Rischio")
+budget_per_trade = st.sidebar.slider("Budget per operazione (€)", 10, 200, 50)
+stop_loss = st.sidebar.slider("Stop Loss (%)", 1, 10, 5)
+
+# --- LOGICA AI ---
 def analizza_asset_full(nome):
     url = f"https://newsapi.org/v2/everything?q={nome}&apiKey={NW_KEY}&language=it&sortBy=publishedAt"
     try:
@@ -20,77 +49,62 @@ def analizza_asset_full(nome):
         art = r.get('articles', [])
         if art:
             titolo = art[0]['title']
-            # Analisi semplice del perché
-            parole_chiave = {"rialzo": "Trend positivo", "utile": "Bilancio solido", "accordo": "Nuova partnership", "record": "Performance storica", "bitcoin": "Adozione crypto"}
-            motivo = next((v for k, v in parole_chiave.items() if k in titolo.lower()), "Stabilità di mercato")
-            score = 0.85 if motivo != "Stabilità di mercato" else 0.50
+            parole_positive = ["rialzo", "utile", "accordo", "record", "crescita", "boom"]
+            score = 0.9 if any(p in titolo.lower() for p in parole_positive) else 0.5
+            motivo = "Segnale Positivo Rilevato" if score > 0.8 else "Nessun segnale chiaro"
             return titolo, score, motivo
     except:
         pass
-    return "Nessuna news fresca", 0.4, "Attesa dati"
+    return "Dati non disponibili", 0.4, "Attesa news"
 
-# --- TITOLO E TIMER ---
-st.title("🚀 AI Terminal: Portafoglio & Strategia")
-st.caption(f"Ultimo aggiornamento live: {time.strftime('%H:%M:%S')} (Auto-refresh ogni 60s)")
+# --- INTERFACCIA PRINCIPALE ---
+st.title("🚀 AI Terminal: Trading Automatico")
+st.caption(f"Status: {'🤖 AUTOMAZIONE ATTIVA' if (auto_bitpanda or auto_etoro) else '🔌 MODALITÀ MANUALE'} | Live: {time.strftime('%H:%M:%S')}")
 
-# --- COLONNE SUPERIORI ---
 col_news, col_top10, col_portafoglio = st.columns([1, 1.4, 1])
 
 with col_news:
-    st.header("📰 Notizie Flash")
-    for t in ["Borsa Italiana", "Fed", "Economia"]:
+    st.header("📰 Breaking News")
+    for t in ["Mercati", "Borsa Italiana"]:
         news, _, _ = analizza_asset_full(t)
-        st.info(f"**{t}**: {news[:70]}...")
+        st.info(f"**{t}**: {news[:80]}...")
 
 with col_top10:
     st.header("🎯 Top 10 Segnali AI")
-    monitorati = ["NVIDIA", "Tesla", "Bitcoin", "Apple", "Ferrari", "Oro", "Amazon", "Microsoft", "Eni", "Meta"]
+    monitorati = ["NVIDIA", "Tesla", "Bitcoin", "Ferrari", "Apple", "Amazon", "Microsoft", "Meta", "Google", "Eni"]
     for m in monitorati:
         news, score, motivo = analizza_asset_full(m)
-        with st.expander(f"{'🟢' if score > 0.8 else '⚪'} {m} - {motivo}"):
-            st.write(f"**Analisi:** {motivo}. Il sentiment rilevato è del {int(score*100)}%")
-            st.caption(f"Ultima News: {news}")
-            if score > 0.8: st.button(f"Acquisto Automatico {m}", key=f"top_{m}")
+        stato = "🟢 BUY" if score > 0.8 else "⚪ HOLD"
+        
+        with st.expander(f"{stato} | {m}"):
+            st.write(f"**Analisi:** {motivo}")
+            st.caption(f"News: {news}")
+            
+            # --- LOGICA DI ESECUZIONE AUTOMATICA ---
+            if score > 0.8:
+                if (auto_bitpanda or auto_etoro):
+                    st.warning(f"🤖 Bot pronto ad acquistare {budget_per_trade}€ di {m}")
+                    # Qui andrà la funzione finale: invia_ordine_reale(m, budget_per_trade)
+                else:
+                    st.button(f"Compra {m} Manualmente", key=f"btn_{m}")
 
 with col_portafoglio:
-    st.header("💼 I Tuoi Asset")
-    # Aggiungi qui tutte le tue azioni
-    miei_asset = {
-        "Leonardo": {"perf": "+4.5%", "val": "520€", "sym": "MIL:LDO"},
-        "Intesa SP": {"perf": "-1.2%", "val": "310€", "sym": "MIL:ISP"},
-        "Enel": {"perf": "+0.8%", "val": "150€", "sym": "MIL:ENEL"},
-        "UniCredit": {"perf": "+2.1%", "val": "400€", "sym": "MIL:UCG"}
-    }
-    for nome, dati in miei_asset.items():
-        st.metric(label=nome, value=dati["val"], delta=dati["perf"])
+    st.header("💼 Asset Attivi")
+    miei_asset = {"Leonardo": "+4.5%", "Intesa SP": "-1.2%", "Enel": "+0.8%"}
+    for nome, perf in miei_asset.items():
+        st.metric(label=nome, value=perf, delta=perf)
 
 st.divider()
 
-# --- GRAFICI CORRETTI ---
-st.header("📊 Grafici Analisi Tecnica (Borsa Italiana)")
-col_g1, col_g2 = st.columns(2)
+# --- GRAFICI ---
+st.header("📊 Grafici Analisi Tecnica")
+g1, g2 = st.columns(2)
+def genera_grafico(sym):
+    return f"""<div style="height:400px;"><script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script><script type="text/javascript">new TradingView.widget({{"autosize": true, "symbol": "{sym}", "interval": "D", "theme": "dark", "style": "1", "locale": "it"}});</script></div>"""
 
-def genera_grafico_fix(symbol):
-    return f"""
-    <div style="height:400px;">
-        <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
-        <script type="text/javascript">
-        new TradingView.widget({{
-          "autosize": true, "symbol": "{symbol}", "interval": "D",
-          "timezone": "Etc/UTC", "theme": "dark", "style": "1", "locale": "it",
-          "enable_publishing": false, "hide_top_toolbar": false, "save_image": false
-        }});
-        </script>
-    </div>
-    """
+with g1: st.components.v1.html(genera_grafico("MIL:LDO"), height=420)
+with g2: st.components.v1.html(genera_grafico("MIL:ISP"), height=420)
 
-with col_g1:
-    st.subheader("Leonardo (LDO)")
-    st.components.v1.html(genera_grafico_fix("MIL:LDO"), height=420)
-with col_g2:
-    st.subheader("Intesa Sanpaolo (ISP)")
-    st.components.v1.html(genera_grafico_fix("MIL:ISP"), height=420)
-
-# --- AUTO REFRESH SCRIPT ---
+# --- REFRESH ---
 time.sleep(60)
 st.rerun()
