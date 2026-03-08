@@ -1,5 +1,4 @@
-streamlit
+requests
+python-dotenv
 pandas
-plotly
-yfinance
-google-news-feed
+streamlit
