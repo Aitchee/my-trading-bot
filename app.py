@@ -1,58 +1,45 @@
 import streamlit as st
 import requests
-import time
 
-st.set_page_config(page_title="Debug Bitpanda V2", layout="wide")
+st.title("🔍 Bitpanda API Scanner")
 
 # Recupero chiave
-BP_KEY = st.secrets.get("BITPANDA_API_KEY", "").strip()
+key = st.secrets["BITPANDA_API_KEY"].strip().replace('"', '')
 
-def test_v2():
-    # Proviamo l'endpoint della v2 che a volte scavalca i blocchi della v1
-    url = "https://api.bitpanda.com/v2/balances"
+def test_endpoint(endpoint):
+    url = f"https://api.bitpanda.com/v1/{endpoint}"
     headers = {
-        "X-Api-Key": BP_KEY,
-        "Accept": "application/json",
-        "Content-Type": "application/json",
-        "User-Agent": "Mozilla/5.0" # Simula un accesso umano
+        "X-API-KEY": key,
+        "Accept": "application/json"
     }
     try:
         r = requests.get(url, headers=headers, timeout=10)
-        return r.json(), r.status_code
+        return r.status_code, r.json()
     except Exception as e:
-        return str(e), "Errore"
+        return "Errore", str(e)
 
-st.title("🤖 Test Connessione V2")
+# --- SCANSIONE ENDPOINT DOCUMENTAZIONE ---
+endpoints = ["fiat-wallets", "balances", "asset-wallets", "currencies"]
 
-dati, status = test_v2()
+st.write("Sto testando gli endpoint della documentazione con la tua chiave...")
 
-if status == 200:
-    st.success("✅ CLAMOROSO: Connesso con V2!")
-    st.json(dati)
-elif status == 401:
-    st.error("❌ Ancora 401: Accesso Negato")
-    st.write("Dettaglio errore:", dati)
-    
-    st.divider()
-    st.warning("⚠️ **Diagnosi Finale:**")
-    st.write("""
-    Se anche questo fallisce, il problema non è il codice, ma una di queste due cose nelle impostazioni di Bitpanda:
-    1. **E-mail di conferma:** Controlla la tua mail. Bitpanda spesso invia una mail per 'autorizzare l'uso della chiave API' dopo che l'hai creata. Finché non clicchi, la chiave dà 401.
-    2. **Restrizioni geografiche/IP:** Streamlit usa server americani o europei random. Se Bitpanda vede un accesso sospetto da un server cloud, lo sega istantaneamente.
-    """)
-else:
-    st.info(f"Status: {status}")
+for ep in endpoints:
+    status, result = test_endpoint(ep)
+    if status == 200:
+        st.success(f"✅ {ep}: FUNZIONA! (200)")
+        st.json(result)
+    else:
+        st.error(f"❌ {ep}: FALLITO ({status})")
+        if status == 401:
+            st.warning(f"Il server dice: Credenziali errate per {ep}. Controlla i permessi Fiat/Balance.")
 
-# Il grafico deve funzionare a prescindere dall'API
-st.subheader("📊 Analisi Tecnica Leonardo (Sempre Attivo)")
+st.divider()
+st.subheader("📊 Analisi Tecnica Leonardo (Sempre attiva)")
 st.components.v1.html("""
     <div style="height:400px;">
-    <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
-    <script type="text/javascript">
-    new TradingView.widget({
-      "autosize": true, "symbol": "MIL:LDO", "interval": "D",
-      "theme": "dark", "style": "1", "locale": "it"
-    });
-    </script>
+        <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
+        <script type="text/javascript">
+        new TradingView.widget({"autosize": true, "symbol": "MIL:LDO", "interval": "D", "theme": "dark", "style": "1", "locale": "it"});
+        </script>
     </div>
 """, height=420)
