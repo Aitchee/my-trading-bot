@@ -1,96 +1,93 @@
 import streamlit as st
+import json
 import requests
-import pandas as pd
 from datetime import datetime
 from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
 from streamlit_autorefresh import st_autorefresh
 
-st_autorefresh(interval=10000, key="datarefresh")
-st.set_page_config(page_title="EDOARDO REAL-TIME TERMINAL", layout="wide")
-
-CID = st.secrets.get("ETORO_ACCOUNT_ID", "").strip()
-TOKEN = st.secrets.get("ETORO_API_KEY", "").strip()
-NEWS_KEY = st.secrets.get("NEWS_API_KEY", "").strip()
-
+st.set_page_config(page_title="EDOARDO AI TERMINAL", layout="wide")
 analyzer = SentimentIntensityAnalyzer()
 
-def fetch_etoro_full():
-    if not TOKEN or not CID: return "CONFIG_MISSING"
+# --- SIDEBAR: INPUT DATI REALI ---
+st.sidebar.header("🔌 Collegamento Live")
+raw_json = st.sidebar.text_area("Incolla qui il JSON della Console eToro:", height=150, help="Copia tutto il blocco 'AggregatedResult' e incollalo qui.")
 
-    headers = {
-        "Authorization": f"Bearer {TOKEN}",
-        "Content-Type": "application/json",
-        "X-Accept-Version": "v1"
-    }
-    
-    # Questo è l'endpoint che genera il JSON che hai postato tu (richiede POST)
-    url = "https://api.etoro.com/v1/aggregate"
-    
-    # Body della richiesta per ottenere i dati che vogliamo
-    payload = {
-        "Requests": [
-            {"Method": "GET", "Path": f"v1/portfolio/{CID}/positions", "Id": 1},
-            {"Method": "GET", "Path": f"v1/accounts/{CID}/balance", "Id": 2}
-        ]
-    }
-
+# --- LOGICA DI PARSING ---
+def parse_etoro_json(data_str):
     try:
-        # Proviamo prima la POST aggregata
-        r = requests.post(url, headers=headers, json=payload, timeout=12)
+        data = json.loads(data_str)
+        # Navighiamo nella struttura che hai postato
+        portfolio = data['AggregatedResult']['ApiResponses']['PrivatePortfolio']['Content']['ClientPortfolio']
+        rates = data['AggregatedResult']['ApiResponses']['Rates']['Content']
         
-        if r.status_code == 200:
-            return r.json()
-        elif r.status_code == 404:
-            # Se l'aggregato fallisce, proviamo l'ultimo URL 'disperato'
-            fallback_url = f"https://api.etoro.com/v1/metadata/users/{CID}"
-            f_res = requests.get(fallback_url, headers=headers, timeout=10)
-            if f_res.status_code == 200:
-                return {"type": "metadata", "data": f_res.json()}
-            return f"ERRORE 404: L'ID {CID} non risponde a nessun servizio."
-        else:
-            return f"ERRORE {r.status_code}"
+        pos_list = []
+        for pos in portfolio['Positions']:
+            instr_id = str(pos['InstrumentID'])
+            # Troviamo il prezzo corrente nei Rates
+            current_rate = rates.get(instr_id, {}).get('Bid', pos['OpenRate'])
+            
+            # Calcolo profitto con Leva (estratta dal JSON)
+            pnl = (current_rate - pos['OpenRate']) if pos['IsBuy'] else (pos['OpenRate'] - current_rate)
+            pnl_perc = (pnl / pos['OpenRate']) * 100 * pos['Leverage']
+            
+            pos_list.append({
+                "Asset": "GOLD" if instr_id == "18" else f"ID {instr_id}",
+                "Investito": pos['Amount'],
+                "Profitto": round(pnl_perc, 2),
+                "Prezzo_Ora": current_rate,
+                "ID": pos['PositionID']
+            })
+        return pos_list
     except Exception as e:
-        return f"ERRORE CONNESSIONE: {str(e)}"
+        return None
 
-# --- INTERFACCIA ---
-st.title(f"🚀 TERMINALE LIVE - {datetime.now().strftime('%H:%M:%S')}")
-
-c1, c2, c3 = st.columns([1, 1.2, 1])
-
-with c1:
-    st.header("💰 Portafoglio IRL")
-    res = fetch_etoro_full()
-    
-    if isinstance(res, str):
-        st.error(res)
-    else:
-        # Parsing dei dati se arrivano dall'aggregatore o dal metadata
-        if "AggregatedResult" in res:
-            st.success("Connessione Aggregata: OK")
-            # Qui estraiamo il saldo se presente nel JSON aggregato
-            st.write("Dati ricevuti con successo dal server.")
-        elif res.get("type") == "metadata":
-            st.success("Connessione Metadata: OK")
-            user = res['data'].get('username', 'Utente')
-            st.metric("Account Rilevato", user)
-            st.info("L'ID è corretto, ma il saldo richiede permessi aggiuntivi.")
-
-with c2:
-    st.header("🎯 Analisi Papabili")
-    # Logica news solita
-    url_n = f"https://newsapi.org/v2/top-headlines?category=business&apiKey={NEWS_KEY}&language=en"
+# --- LOGICA NEWS ---
+def get_ai_signals():
+    news_key = st.secrets.get("NEWS_API_KEY", "f47b85db22664beba249feed052403c3")
+    url = f"https://newsapi.org/v2/top-headlines?category=business&apiKey={news_key}&language=en"
     try:
-        n_res = requests.get(url_n).json()
-        articles = n_res.get('articles', [])
-        for asset in ["Gold", "Bitcoin", "NVIDIA"]:
+        r = requests.get(url).json()
+        articles = r.get('articles', [])
+        watchlist = ["Gold", "Bitcoin", "NVIDIA", "Tesla"]
+        found = []
+        for asset in watchlist:
             rel = [a for a in articles if asset.lower() in (a['title'] or "").lower()]
             if rel:
                 score = analyzer.polarity_scores(rel[0]['title'])['compound']
-                if score > 0.1: st.success(f"**BUY {asset}**")
-                elif score < -0.1: st.error(f"**SELL {asset}**")
-                else: st.warning(f"**WAIT {asset}**")
-    except: st.write("Caricamento news...")
+                found.append({"name": asset, "score": score, "news": rel[0]['title']})
+        return found, articles
+    except: return [], []
 
-with c3:
-    st.header("📰 News Feed")
-    st.write("In attesa di dati live...")
+# --- DASHBOARD ---
+st.title(f"🤖 EDOARDO AI TERMINAL - {datetime.now().strftime('%H:%M:%S')}")
+
+col1, col2, col3 = st.columns([1, 1.2, 1])
+
+with col1:
+    st.header("💰 Portafoglio IRL")
+    if raw_json:
+        user_data = parse_etoro_json(raw_json)
+        if user_data:
+            for p in user_data:
+                st.metric(f"{p['Asset']} (Prezzo: {p['Prezzo_Ora']})", f"${p['Investito']}", f"{p['Profitto']}%")
+                st.caption(f"ID Posizione: {p['ID']}")
+            st.success("Dati sincronizzati con successo.")
+        else:
+            st.error("Formato JSON non valido. Assicurati di copiare tutto.")
+    else:
+        st.info("Incolla il JSON nella barra laterale per visualizzare i tuoi asset reali.")
+
+with col2:
+    st.header("🎯 Papabili Acquisto")
+    signals, news_list = get_ai_signals()
+    for s in signals:
+        if s['score'] > 0.1: st.success(f"**BUY {s['name']}** (Sentiment: {s['score']:.2f})")
+        elif s['score'] < -0.1: st.error(f"**SELL {s['name']}** (Sentiment: {s['score']:.2f})")
+        else: st.warning(f"**WAIT {s['name']}**")
+        st.caption(f"News: {s['news'][:60]}...")
+
+with col3:
+    st.header("📰 News Feed Live")
+    for n in news_list[:10]:
+        st.write(f"**{n['source']['name']}**: [{n['title']}]({n['url']})")
+        st.divider()
