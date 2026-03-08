@@ -14,19 +14,42 @@ except Exception:
     st.error("❌ Errore: Chiavi API mancanti nei Secrets di Streamlit!")
     st.stop()
 
-# --- 3. FUNZIONE SALDO REALE (BITPANDA) ---
+# --- 3. FUNZIONI DI RECUPERO DATI REALI (BITPANDA) ---
+
 def recupera_saldo_bitpanda():
-    # Nota: richiede permesso 'Read' sulla chiave API di Bitpanda
+    """Recupera il saldo EUR reale dal portafoglio Fiat"""
     url = "https://api.bitpanda.com/v1/fiat-wallets"
     headers = {"X-API-KEY": BP_KEY}
     try:
-        response = requests.get(url, headers=headers).json()
-        for wallet in response['data']:
-            if wallet['attributes']['symbol'] == 'EUR':
-                return f"{wallet['attributes']['balance']} €"
+        response = requests.get(url, headers=headers)
+        if response.status_code == 200:
+            data = response.json().get('data', [])
+            for wallet in data:
+                if wallet['attributes']['symbol'] == 'EUR':
+                    balance = float(wallet['attributes']['balance'])
+                    return f"{balance:.2f} €"
+        return "Errore Permessi"
     except:
         return "Errore Sync"
-    return "0.00 €"
+
+def recupera_asset_reali():
+    """Recupera le cripto o azioni possedute su Bitpanda"""
+    url = "https://api.bitpanda.com/v1/asset-wallets"
+    headers = {"X-API-KEY": BP_KEY}
+    asset_trovati = {}
+    try:
+        response = requests.get(url, headers=headers)
+        if response.status_code == 200:
+            data = response.json().get('data', [])
+            for wallet in data:
+                balance = float(wallet['attributes']['balance'])
+                if balance > 0.001: # Filtra i portafogli vuoti
+                    nome = wallet['attributes']['cryptocoin_symbol']
+                    asset_trovati[nome] = {"val": f"{balance:.4f}", "perf": "Live"}
+            return asset_trovati
+        return None
+    except:
+        return None
 
 # --- 4. LOGICA AI & SENTIMENT ---
 def analizza_asset_full(nome):
@@ -36,23 +59,23 @@ def analizza_asset_full(nome):
         art = r.get('articles', [])
         if art:
             titolo = art[0]['title']
-            parole_positive = ["rialzo", "utile", "accordo", "record", "crescita", "boom", "partnership"]
-            score = 0.92 if any(p in titolo.lower() for p in parole_positive) else 0.45
-            motivo = "Forte segnale positivo (News)" if score > 0.8 else "Nessun segnale operativo"
+            parole_positive = ["rialzo", "utile", "accordo", "record", "crescita", "partnership", "buy"]
+            score = 0.92 if any(p in titolo.lower() for p in parole_positive) else 0.48
+            motivo = "Segnale Positivo Rilevato" if score > 0.8 else "Analisi Neutra"
             return titolo, score, motivo
     except:
         pass
-    return "Dati non disponibili", 0.4, "Attesa aggiornamento"
+    return "Dati non disponibili", 0.4, "Attesa news"
 
-# --- 5. SIDEBAR: COMANDO E CONTROLLO ---
-st.sidebar.title("🎮 Centro di Comando")
+# --- 5. SIDEBAR: CENTRO DI COMANDO ---
+st.sidebar.title("🎮 Comando Automazione")
 st.sidebar.divider()
 
 # Visualizzazione Saldo Reale
 saldo_bp = recupera_saldo_bitpanda()
 with st.sidebar.expander("💰 Saldo Reale LIVE", expanded=True):
-    st.write(f"Bitpanda: **{saldo_bp}**")
-    st.write("eToro: **In attesa API...**")
+    st.write(f"Bitpanda EUR: **{saldo_bp}**")
+    st.write("eToro: **Sync in attesa**")
 
 st.sidebar.divider()
 
@@ -60,24 +83,19 @@ st.sidebar.divider()
 st.sidebar.subheader("🤖 Automazione")
 auto_mode = st.sidebar.toggle("ATTIVA PILOTA AUTOMATICO", value=False)
 if auto_mode:
-    st.sidebar.warning("⚠️ IL BOT OPERERÀ DA SOLO!")
+    st.sidebar.warning("⚠️ BOT ARMATO: Operazioni automatiche attive")
 
-# Parametri di Rischio
 budget_trade = st.sidebar.slider("Budget per operazione (€)", 10, 500, 50)
-stop_loss = st.sidebar.slider("Stop Loss globale (%)", 1, 15, 5)
-
-if st.sidebar.button("🔴 DISATTIVA TUTTO", type="secondary"):
-    st.rerun()
 
 # --- 6. INTERFACCIA PRINCIPALE ---
 st.title("🚀 AI Terminal: Trading Operativo")
-st.caption(f"Aggiornamento Live: {time.strftime('%H:%M:%S')} | Refresh ogni 60s")
+st.caption(f"Status: {'🤖 AUTOMATICO' if auto_mode else '🔌 MANUALE'} | Live: {time.strftime('%H:%M:%S')}")
 
 col_news, col_top10, col_portafoglio = st.columns([1, 1.4, 1])
 
 with col_news:
-    st.header("📰 Breaking News")
-    for t in ["Borsa Italiana", "Mercati Euro", "Nasdaq"]:
+    st.header("📰 News Flash")
+    for t in ["Borsa Italiana", "Mercati"]:
         news, _, _ = analizza_asset_full(t)
         st.info(f"**{t}**: {news[:80]}...")
 
@@ -87,32 +105,32 @@ with col_top10:
     for m in monitorati:
         news, score, motivo = analizza_asset_full(m)
         stato = "🟢 BUY" if score > 0.8 else "⚪ HOLD"
-        
-        with st.expander(f"{stato} | {m} ({int(score*100)}%)"):
-            st.write(f"**Analisi AI:** {motivo}")
-            st.caption(f"Ultima News: {news}")
-            
+        with st.expander(f"{stato} | {m}"):
+            st.write(f"**Analisi:** {motivo}")
+            st.caption(f"News: {news}")
             if score > 0.8:
                 if auto_mode:
-                    st.success(f"🤖 Automazione pronta: acquisto {budget_trade}€ in corso...")
+                    st.success(f"🤖 Pronto ad acquistare {budget_trade}€")
                 else:
-                    st.button(f"Conferma Acquisto {m}", key=f"buy_{m}")
+                    st.button(f"Compra {m}", key=f"buy_{m}")
 
 with col_portafoglio:
-    st.header("💼 Asset in Possesso")
-    # Qui inserisci i tuoi asset reali
-    miei_asset = {
-        "Leonardo": {"perf": "+4.5%", "val": "520€", "sym": "MIL:LDO"},
-        "Intesa SP": {"perf": "-1.2%", "val": "310€", "sym": "MIL:ISP"},
-        "Enel": {"perf": "+0.8%", "val": "150€", "sym": "MIL:ENEL"}
-    }
-    for nome, d in miei_asset.items():
-        st.metric(label=nome, value=d["val"], delta=d[ "perf"])
+    st.header("💼 I Tuoi Asset")
+    asset_live = recupera_asset_reali()
+    
+    if asset_live:
+        for nome, d in asset_live.items():
+            st.metric(label=nome, value=d["val"], delta=d["perf"])
+    else:
+        # Se le API falliscono, mostra i dati di esempio per non lasciare vuoto
+        st.warning("⚠️ Usando dati di esempio (Verifica API Key)")
+        st.metric("Leonardo", "520€", "+4.5%")
+        st.metric("Intesa SP", "310€", "-1.2%")
 
 st.divider()
 
 # --- 7. GRAFICI ---
-st.header("📊 Analisi Tecnica (TradingView)")
+st.header("📊 Analisi Tecnica")
 g1, g2 = st.columns(2)
 
 def genera_grafico(sym):
@@ -129,12 +147,12 @@ def genera_grafico(sym):
     """
 
 with g1:
-    st.subheader("Leonardo SPA (LDO)")
+    st.subheader("Leonardo (LDO)")
     st.components.v1.html(genera_grafico("MIL:LDO"), height=420)
 with g2:
     st.subheader("Intesa Sanpaolo (ISP)")
     st.components.v1.html(genera_grafico("MIL:ISP"), height=420)
 
-# --- 8. AUTO REFRESH ---
+# --- 8. AUTO REFRESH (60 secondi) ---
 time.sleep(60)
 st.rerun()
