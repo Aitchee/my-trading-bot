@@ -2,104 +2,62 @@ import streamlit as st
 import requests
 import time
 
-# --- CONFIGURAZIONE PAGINA ---
+# 1. Impostazioni pagina
 st.set_page_config(page_title="AI Terminal PRO", layout="wide")
 
-# --- RECUPERO CHIAVI ---
-try:
-    BP_KEY = str(st.secrets["BITPANDA_API_KEY"]).strip().replace('"', '').replace("'", "")
-except Exception:
-    st.error("Configura BITPANDA_API_KEY nei Secrets")
-    st.stop()
+# 2. INCOLLA QUI IL TUO URL DI GOOGLE SCRIPT
+GOOGLE_BRIDGE_URL = "https://script.google.com/macros/s/AKfycbxT8Z-dfwGB9oBTwneveMHAXF9DdWxE-z5GYKlbnStSyX1OGuw_qq2Q4TqTPf-TEfhP/exec"
 
-# --- FUNZIONE API DEFINITIVA ---
-def get_bp_data(endpoint):
-    url = f"https://api.bitpanda.com/v1/{endpoint}"
-    headers = {
-        "X-API-KEY": BP_KEY,
-        "Accept": "application/json"
-    }
+# 3. Funzione di recupero dati tramite il "Ponte"
+def recupera_dati_ponte():
     try:
-        r = requests.get(url, headers=headers, timeout=10)
-        status = r.status_code
-        if status == 200:
-            raw_data = r.json()
-            # Verifichiamo con estrema cautela che 'data' sia una lista
-            if isinstance(raw_data, dict) and isinstance(raw_data.get('data'), list):
-                return raw_data['data'], 200
-        return [], status
-    except:
-        return [], "Connection Error"
+        # Chiamata a Google Script invece che a Bitpanda direttamente
+        r = requests.get(GOOGLE_BRIDGE_URL, timeout=15)
+        if r.status_code == 200:
+            return r.json().get('data', []), 200
+        return [], r.status_code
+    except Exception as e:
+        return [], f"Errore: {str(e)[:20]}"
 
-# --- LAYOUT DASHBOARD ---
-st.title("🚀 AI Financial Command Center")
-st.caption(f"Status Live | Aggiornato: {time.strftime('%H:%M:%S')}")
+# --- INTERFACCIA GRAFICA ---
+st.title("🚀 AI Financial Terminal (Google Bridge)")
+st.caption(f"Status: Collegato tramite Proxy Google | {time.strftime('%H:%M:%S')}")
 
 col_sx, col_cx, col_dx = st.columns([1, 1.2, 1.2])
 
-# --- COLONNA SINISTRA: PORTAFOGLIO ---
 with col_sx:
     st.subheader("💰 Portafoglio")
-    fiat_data, fiat_status = get_bp_data("fiat-wallets")
+    data, status = recupera_dati_ponte()
     
-    if fiat_status == 200 and fiat_data:
-        for w in fiat_data:
-            # Accesso ultra-sicuro ai dati
-            if isinstance(w, dict):
-                attr = w.get('attributes', {})
-                if attr.get('symbol') == 'EUR':
-                    bal = attr.get('balance', 0)
-                    st.metric("Saldo Euro", f"{float(bal):.2f} €")
+    if status == 200:
+        st.success("✅ Dati Ricevuti")
+        for w in data:
+            # Cerchiamo il saldo EUR
+            if w.get('attributes', {}).get('symbol') == 'EUR':
+                bal = w['attributes']['balance']
+                st.metric("Saldo Bitpanda (EUR)", f"{float(bal):.2f} €")
     else:
-        st.error(f"Bitpanda API: {fiat_status}")
-        if fiat_status == 401:
-            st.info("💡 Chiave non riconosciuta. Verifica che la chiave sia 'Active' e non 'Pending'.")
+        st.error(f"Errore Connessione: {status}")
+        st.info("💡 Se vedi 401, controlla di aver messo la Chiave API corretta dentro lo script di Google.")
 
-    st.divider()
-    st.subheader("💼 Asset Reali")
-    asset_data, asset_status = get_bp_data("asset-wallets")
-    
-    found = False
-    if asset_status == 200 and isinstance(asset_data, list):
-        for a in asset_data:
-            if isinstance(a, dict):
-                attr = a.get('attributes', {})
-                bal = float(attr.get('balance', 0))
-                if bal > 0.0001:
-                    st.write(f"**{attr.get('cryptocoin_symbol')}**: {bal:.4f}")
-                    found = True
-    
-    if not found:
-        st.write("Nessun asset rilevato o errore di connessione.")
-
-# --- COLONNA CENTRALE: SEGNALI AI ---
 with col_cx:
-    st.subheader("🎯 Top 10 Segnali AI")
-    # Lista monitorata
-    assets_monitor = ["Bitcoin", "NVIDIA", "Tesla", "Apple", "Ferrari", "Amazon", "Microsoft", "Meta", "Eni", "Enel"]
-    for m in assets_monitor:
+    st.subheader("🎯 Segnali AI")
+    for m in ["Bitcoin", "NVIDIA", "Tesla", "Apple", "Ferrari"]:
         with st.expander(f"Analisi {m}"):
-            st.write(f"Sentiment per {m}: **OTTIMO**")
-            st.progress(0.85)
-            st.button("Esegui Trade", key=f"trade_{m}")
+            st.write("Sentiment: **RIALZISTA**")
+            st.button(f"Trade {m}", key=m)
 
-# --- COLONNA DESTRA: GRAFICI ---
 with col_dx:
-    st.subheader("📊 Analisi Tecnica Leonardo")
-    # Widget TradingView corretto per Milano
-    chart_html = """
-    <div style="height:400px;">
+    st.subheader("📊 Grafico Leonardo (Milano)")
+    st.components.v1.html("""
+        <div style="height:400px;">
         <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
         <script type="text/javascript">
-        new TradingView.widget({
-          "autosize": true, "symbol": "MIL:LDO", "interval": "D",
-          "theme": "dark", "style": "1", "locale": "it", "timezone": "Etc/UTC"
-        });
+        new TradingView.widget({"autosize": true, "symbol": "MIL:LDO", "interval": "D", "theme": "dark", "style": "1", "locale": "it"});
         </script>
-    </div>
-    """
-    st.components.v1.html(chart_html, height=420)
+        </div>
+    """, height=420)
 
-# Refresh automatico 60s
+# Refresh automatico ogni minuto
 time.sleep(60)
 st.rerun()
