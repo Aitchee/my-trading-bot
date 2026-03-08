@@ -2,45 +2,70 @@ import streamlit as st
 import requests
 import time
 
-st.set_page_config(page_title="AI Trading Terminal", layout="wide")
+st.set_page_config(page_title="AI Terminal PRO", layout="wide")
 
-# Recupero Chiave
-BP_KEY = st.secrets.get("BITPANDA_API_KEY", "").strip().replace('"', '')
+# Recupero Chiave Pulita
+try:
+    BP_KEY = str(st.secrets["BITPANDA_API_KEY"]).strip().replace('"', '').replace("'", "")
+    NW_KEY = str(st.secrets["NEWS_API_KEY"]).strip()
+except:
+    st.error("Configura i Secrets!")
+    st.stop()
 
-def get_data(endpoint):
+# Funzione con Header di sicurezza avanzato
+def get_bitpanda_data(endpoint):
     url = f"https://api.bitpanda.com/v1/{endpoint}"
-    headers = {"X-API-KEY": BP_KEY, "Accept": "application/json"}
+    headers = {
+        "X-API-KEY": BP_KEY,
+        "Accept": "application/json",
+        "User-Agent": "Mozilla/5.0" # Fondamentale per far accettare la chiave confermata
+    }
     try:
         r = requests.get(url, headers=headers, timeout=10)
-        return r.json(), r.status_code
-    except: return None, "Errore"
+        if r.status_code == 200:
+            return r.json().get('data', []), 200
+        return [], r.status_code
+    except:
+        return [], "Timeout"
 
+# --- INTERFACCIA ---
 st.title("🚀 AI Financial Command Center")
-st.divider()
+st.caption(f"Status: Live | {time.strftime('%H:%M:%S')}")
 
-col1, col2, col3 = st.columns([1, 1.2, 1.2])
+col_port, col_ai, col_chart = st.columns([1, 1.2, 1.2])
 
-with col1:
+with col_port:
     st.subheader("💰 Portafoglio")
-    res, status = get_data("fiat-wallets")
+    # Fiat Wallets (Saldo Euro)
+    fiat, status = get_bitpanda_data("fiat-wallets")
+    
     if status == 200:
-        for w in res.get('data', []):
+        st.success("✅ Connessione Riuscita!")
+        for w in fiat:
             if w['attributes']['symbol'] == 'EUR':
                 st.metric("Saldo Euro", f"{float(w['attributes']['balance']):.2f} €")
     else:
-        st.error(f"Bitpanda: {status}")
-        st.caption("⚠️ Controlla permessi 'Fiat Wallet' nella Dashboard Bitpanda.")
+        st.error(f"Bitpanda Status: {status}")
+        if status == 401:
+            st.info("⚠️ Se la chiave è confermata, prova a fare un 'Reboot' dell'app da Streamlit Cloud.")
 
-with col2:
+    st.divider()
+    st.subheader("💼 Asset Reali")
+    assets, _ = get_bitpanda_data("asset-wallets")
+    for a in assets:
+        bal = float(a['attributes']['balance'])
+        if bal > 0.0001:
+            st.write(f"**{a['attributes']['cryptocoin_symbol']}**: {bal:.4f}")
+
+with col_ai:
     st.subheader("🎯 Top 10 Segnali AI")
-    for m in ["Bitcoin", "NVIDIA", "Tesla", "Apple", "Eni", "Ferrari", "Amazon", "Google", "Meta", "Microsoft"]:
+    for m in ["Bitcoin", "NVIDIA", "Tesla", "Apple", "Ferrari", "Amazon", "Google", "Meta", "Eni", "Enel"]:
         with st.expander(f"Analisi {m}"):
-            st.write(f"News sentiment positivo rilevato. Score: 88%")
-            st.button(f"Trade {m}", key=f"btn_{m}")
+            st.write("Analisi News in corso...")
+            st.button("Trade", key=f"t_{m}")
 
-with col3:
-    st.subheader("📊 Grafico Live")
-    # Grafico Leonardo su Borsa Italiana (MIL)
+with col_chart:
+    st.subheader("📊 Analisi Tecnica Leonardo")
     st.components.v1.html("""
         <div style="height:400px;">
         <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
@@ -50,6 +75,5 @@ with col3:
         </div>
     """, height=420)
 
-st.sidebar.info("Il sistema si aggiorna ogni 60 secondi.")
 time.sleep(60)
 st.rerun()
