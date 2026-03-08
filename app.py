@@ -5,116 +5,107 @@ from datetime import datetime
 from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
 from streamlit_autorefresh import st_autorefresh
 
-# --- CONFIGURAZIONE LIVE ---
-st.set_page_config(page_title="EDOARDO REAL-TIME TERMINAL", layout="wide")
-st_autorefresh(interval=10000, key="datarefresh") # 10 secondi secchi
+# Refresh 10 secondi
+st_autorefresh(interval=10000, key="datarefresh")
 
-# Recupero chiavi dai Secrets (OBBLIGATORI)
-ETORO_API_KEY = st.secrets.get("eyJjaSI6IjYwY2FiYjBiLTU1OTctNDQ4NS04ZjYzLTdlOWUwNTZlMGJiOCIsImVhbiI6IlVucmVnaXN0ZXJlZEFwcGxpY2F0aW9uIiwiZWsiOiJyNEU1OEc0QmJXV2xvYmtQTFZUd3ZFN0UxamE1aVJvNC1uRjVsNUVKdWhGdTZCeFNObGdSbERsLlpsN01ic0tPcWJZdUR4emk1dEFNdDhNUHFGRWU5TVVJR3E3LmpGTkVKNnVjdXZra2U0NF8ifQ__", "")
-ETORO_ACCOUNT_ID = st.secrets.get("ETORO_ACCOUNT_ID", "EdoardoCegna984")
-NEWS_API_KEY = st.secrets.get("NEWS_API_KEY", "f47b85db22664beba249feed052403c3")
+st.set_page_config(page_title="EDOARDO AI TERMINAL", layout="wide")
 
-analyzer = SentimentIntensityAnalyzer()
+# --- DIAGNOSTICA SECRETS ---
+st.sidebar.header("🛠 Diagnostica Sistema")
+check_news = "✅ Caricata" if "NEWS_API_KEY" in st.secrets else "❌ MANCANTE"
+check_etoro = "✅ Caricata" if "ETORO_API_KEY" in st.secrets else "❌ MANCANTE"
+check_id = "✅ Caricato" if "ETORO_ACCOUNT_ID" in st.secrets else "❌ MANCANTE"
 
-# --- COMUNICAZIONE REALE ETORO ---
-def fetch_etoro_live():
-    if not ETORO_API_KEY or not ETORO_ACCOUNT_ID:
-        return "ERRORE: Chiavi API non configurate nei Secrets."
+st.sidebar.write(f"News API: {check_news}")
+st.sidebar.write(f"eToro Key: {check_etoro}")
+st.sidebar.write(f"Account ID: {check_id}")
+
+# --- RECUPERO DATI (SOLO API) ---
+def fetch_etoro_data():
+    # Recupero diretto dai segreti
+    key = st.secrets.get("ETORO_API_KEY")
+    acc_id = st.secrets.get("ETORO_ACCOUNT_ID")
     
+    if not key or not acc_id:
+        return "ERROR_CONFIG"
+
     headers = {
-        "Authorization": f"Bearer {ETORO_API_KEY}",
-        "Content-Type": "application/json"
+        "Authorization": f"Bearer {key}",
+        "Content-Type": "application/json",
+        "X-Accept-Version": "v1"
     }
     
-    # Endpoint eToro per posizioni e saldo
-    url_p = f"https://api.etoro.com/v1/accounts/{ETORO_ACCOUNT_ID}/positions"
-    url_b = f"https://api.etoro.com/v1/accounts/{ETORO_ACCOUNT_ID}/balance"
-    
     try:
-        # Richiesta Saldo
-        res_b = requests.get(url_b, headers=headers, timeout=8)
-        # Richiesta Posizioni
-        res_p = requests.get(url_p, headers=headers, timeout=8)
+        # Tentativo saldo
+        url = f"https://api.etoro.com/v1/accounts/{acc_id}/balance"
+        r = requests.get(url, headers=headers, timeout=10)
         
-        if res_b.status_code == 200 and res_p.status_code == 200:
-            return {
-                "balance": res_b.json().get('balance'),
-                "positions": res_p.json().get('positions', [])
-            }
+        if r.status_code == 200:
+            return r.json()
         else:
-            return f"ERRORE API ETORO: Status {res_b.status_code}. Controlla la validità della chiave."
+            return f"ERRORE API: {r.status_code} - {r.text[:100]}"
     except Exception as e:
-        return f"ERRORE CONNESSIONE: Impossibile raggiungere i server eToro ({str(e)})"
+        return f"ERRORE RETE: {str(e)}"
 
-# --- CALCOLO DINAMICO PAPABILI ---
-def get_dynamic_signals():
-    # Prende le news business dell'ultimo minuto
-    url = f"https://newsapi.org/v2/top-headlines?category=business&apiKey={NEWS_API_KEY}&language=en"
+# --- ANALISI NEWS DINAMICA ---
+def analyze_market():
+    news_key = st.secrets.get("NEWS_API_KEY")
+    if not news_key: return [], []
+    
+    url = f"https://newsapi.org/v2/top-headlines?category=business&apiKey={news_key}&language=en"
     try:
-        r = requests.get(url, timeout=5).json()
-        articles = r.get('articles', [])
+        res = requests.get(url).json()
+        articles = res.get('articles', [])
+        analyzer = SentimentIntensityAnalyzer()
         
-        # Scannerizziamo i titoli per trovare asset citati
-        watchlist = ["Bitcoin", "Gold", "NVIDIA", "Tesla", "Oil", "Apple", "Ethereum"]
-        found_signals = []
-        
+        watchlist = ["Gold", "Bitcoin", "NVIDIA", "Tesla", "Oil"]
+        signals = []
         for asset in watchlist:
-            relevant = [a['title'] for a in articles if asset.lower() in a['title'].lower()]
+            relevant = [a for a in articles if asset.lower() in (a['title'] or "").lower()]
             if relevant:
-                # Calcolo sentiment matematico
-                avg_score = sum([analyzer.polarity_scores(t)['compound'] for t in relevant]) / len(relevant)
-                found_signals.append({"name": asset, "score": avg_score, "news": relevant[0]})
-        
-        return sorted(found_signals, key=lambda x: x['score'], reverse=True), articles
+                score = sum([analyzer.polarity_scores(a['title'])['compound'] for a in relevant]) / len(relevant)
+                signals.append({"asset": asset, "score": score, "news": relevant[0]['title']})
+        return signals, articles
     except:
         return [], []
 
-# --- INTERFACCIA ---
-st.title(f"📊 TERMINAL EDOARDO - LIVE {datetime.now().strftime('%H:%M:%S')}")
+# --- LAYOUT DASHBOARD ---
+st.title(f"🚀 TERMINALE LIVE - {datetime.now().strftime('%H:%M:%S')}")
 
-col_left, col_mid, col_right = st.columns([1, 1.2, 1])
+col1, col2, col3 = st.columns([1, 1.2, 1])
 
-# COLONNA 1: I MIEI ASSET (SOLO API)
-with col_left:
-    st.header("💰 eToro Live Data")
-    data = fetch_etoro_live()
+# COLONNA 1: ASSET REALI
+with col1:
+    st.header("💰 eToro IRL")
+    res = fetch_etoro_data()
     
-    if isinstance(data, str):
-        st.error(data) # Qui vedrai l'errore se l'API non risponde
+    if res == "ERROR_CONFIG":
+        st.error("I Secrets non sono stati letti correttamente da Streamlit.")
+    elif isinstance(res, str):
+        st.error(f"Dati non ricevuti: {res}")
     else:
-        st.metric("Saldo Attuale (API)", f"${data['balance']}")
-        if not data['positions']:
-            st.info("Nessuna posizione aperta rilevata dalle API.")
-        for p in data['positions']:
-            st.metric(f"{p['displaySymbol']}", f"${p['currentValue']}", f"{p['profitPercentage']}%")
+        st.metric("Saldo Reale (USD)", f"${res.get('balance', 'N/D')}")
+        st.success("Connessione eToro Stabilita!")
 
-# COLONNA 2: CALCOLO PAPABILI (MATEMATICO)
-with col_mid:
-    st.header("🎯 Segnali AI Dinamici")
-    signals, raw_news = get_dynamic_signals()
-    
+# COLONNA 2: SEGNALI AI (CALCOLO DINAMICO)
+with col2:
+    st.header("🎯 Papabili Acquisto")
+    signals, news_list = analyze_market()
     if not signals:
-        st.write("Scansione titoli in corso... Nessun trend forte rilevato.")
-    else:
-        for s in signals:
-            if s['score'] > 0.15:
-                st.success(f"**BUY {s['name']}**")
-                st.caption(f"Sentiment: {s['score']:.2f}")
-            elif s['score'] < -0.15:
-                st.error(f"**SELL {s['name']}**")
-                st.caption(f"Sentiment: {s['score']:.2f}")
-            else:
-                st.warning(f"**WAIT {s['name']}**")
-            st.write(f"News: {s['news'][:60]}...")
-            st.divider()
+        st.info("Nessun trend rilevato nelle news recenti.")
+    for s in signals:
+        if s['score'] > 0.15:
+            st.success(f"**BUY {s['asset']}** ({s['score']:.2f})")
+        elif s['score'] < -0.15:
+            st.error(f"**SELL {s['asset']}** ({s['score']:.2f})")
+        else:
+            st.warning(f"**WAIT {s['asset']}** ({s['score']:.2f})")
+        st.caption(f"Headline: {s['news'][:60]}...")
 
-# COLONNA 3: NEWS REALI
-with col_right:
+# COLONNA 3: NEWS FEED
+with col3:
     st.header("📰 News Stream")
-    if raw_news:
-        for n in raw_news[:10]:
-            st.markdown(f"**{n['source']['name']}**")
-            st.write(f"[{n['title']}]({n['url']})")
-            st.divider()
-
-st.markdown("<style>.stMetric { background-color: #0e1117; border: 1px solid #30363d; padding: 10px; }</style>", unsafe_allow_html=True)
+    for n in news_list[:8]:
+        st.markdown(f"**{n['source']['name']}**")
+        st.write(f"[{n['title']}]({n['url']})")
+        st.divider()
