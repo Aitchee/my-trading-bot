@@ -5,7 +5,7 @@ import datetime
 st.set_page_config(page_title="AI Terminal PRO", layout="wide")
 
 # INCOLLA QUI IL NUOVO URL CHE HAI COPIATO DA GOOGLE
-BRIDGE_URL = "INCOLLA_QUI_IL_NUOVO_LINK_EXEC"
+BRIDGE_URL = "https://script.google.com/macros/s/AKfycbygLJWSdT0GSTw8qm_1uLOJswsB8J2EHjZ7SjZGpqesnKiTuCW_hx8CZKQF8Z-KkntsjQ/exec"
 
 def recupera_dati():
     try:
@@ -43,3 +43,4 @@ with col_sx:
 with col_dx:
     st.subheader("📊 Grafico")
     st.components.v1.html('<div style="height:450px;"><script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script><script type="text/javascript">new TradingView.widget({"autosize":true,"symbol":"MIL:LDO","interval":"D","theme":"dark","style":"1","locale":"it"});</script></div>', height=460)
+
