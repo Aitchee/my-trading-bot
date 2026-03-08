@@ -7,14 +7,16 @@ st.set_page_config(page_title="AI Financial Terminal", layout="wide")
 
 # --- RECUPERO CHIAVI ---
 try:
-    BP_KEY = str(st.secrets["BITPANDA_API_KEY"]).strip().replace('"', '').replace("'", "")
-    NW_KEY = str(st.secrets["NEWS_API_KEY"]).strip().replace('"', '').replace("'", "")
-except Exception as e:
-    st.error("⚠️ Configura le chiavi nei Secrets di Streamlit (BITPANDA_API_KEY e NEWS_API_KEY)")
+    # Pulizia totale della chiave da ogni carattere strano
+    raw_bp_key = str(st.secrets["BITPANDA_API_KEY"])
+    BP_KEY = raw_bp_key.strip().replace('"', '').replace("'", "")
+    NW_KEY = str(st.secrets["NEWS_API_KEY"]).strip()
+except Exception:
+    st.error("⚠️ Chiavi non trovate nei Secrets.")
     st.stop()
 
-# --- FUNZIONE API BITPANDA ---
-def get_bitpanda_data(endpoint):
+# --- FUNZIONE API ---
+def get_bp_data(endpoint):
     url = f"https://api.bitpanda.com/v1/{endpoint}"
     headers = {"X-API-KEY": BP_KEY}
     try:
@@ -27,72 +29,61 @@ def get_bitpanda_data(endpoint):
 
 # --- INTERFACCIA ---
 st.title("🚀 AI Financial Terminal")
-st.caption(f"Status Live | Refresh: {time.strftime('%H:%M:%S')}")
+st.caption(f"Status Live | {time.strftime('%H:%M:%S')}")
 
 col_sx, col_cx, col_dx = st.columns([1, 1.2, 1.2])
 
-# --- COLONNA 1: SALDO E ASSET ---
 with col_sx:
     st.subheader("💰 Portafoglio")
-    # Fiat Wallets per il saldo in Euro
-    fiat_wallets, status = get_bitpanda_data("fiat-wallets")
+    # Proviamo a leggere il saldo Fiat
+    fiat_wallets, status = get_bp_data("fiat-wallets")
     
     if status == 200:
-        found_eur = False
+        st.success("✅ Connessione Bitpanda riuscita!")
         for w in fiat_wallets:
             if w['attributes']['symbol'] == 'EUR':
                 st.metric("Saldo Euro", f"{float(w['attributes']['balance']):.2f} €")
-                found_eur = True
-        if not found_eur:
-            st.warning("Nessun portafoglio EUR trovato.")
     elif status == 401:
         st.error("❌ Errore 401: Chiave non valida.")
-    elif status == 403:
-        st.error("❌ Errore 403: Permessi mancanti (Saldo/Transazione).")
+        st.info("Consiglio: Ricrea la chiave su Bitpanda e incollala senza spazi.")
     else:
-        st.error(f"Errore Bitpanda: {status}")
+        st.error(f"Bitpanda API Status: {status}")
 
     st.divider()
     st.subheader("💼 Asset Reali")
-    # Asset Wallets per le crypto/azioni possedute
     if status == 200:
-        assets, _ = get_bitpanda_data("asset-wallets")
-        found_asset = False
+        assets, _ = get_bp_data("asset-wallets")
+        found = False
         for a in assets:
             bal = float(a['attributes']['balance'])
             if bal > 0.0001:
                 st.write(f"**{a['attributes']['cryptocoin_symbol']}**: {bal:.4f}")
-                found_asset = True
-        if not found_asset: st.write("Nessun asset in possesso.")
+                found = True
+        if not found: st.write("Nessun asset trovato.")
+    else:
+        st.warning("In attesa di chiave valida...")
 
-# --- COLONNA 2: NEWS & SEGNALI ---
 with col_cx:
     st.subheader("🎯 Top 10 Segnali AI")
-    monitorati = ["Bitcoin", "NVIDIA", "Tesla", "Ferrari", "Apple", "Amazon", "Microsoft", "Meta", "Google", "Enel"]
-    
-    for m in monitorati:
+    # Visualizzazione semplificata per evitare crash
+    for m in ["Bitcoin", "NVIDIA", "Tesla", "Apple", "Ferrari"]:
         with st.expander(f"Analisi {m}"):
-            st.write(f"Sentiment Analysis per {m}...")
-            if st.button(f"Trade {m}", key=f"btn_{m}"):
-                st.toast(f"Ordine simulato per {m}")
+            st.write("Segnale basato su News API...")
+            st.button(f"Trade {m}", key=m)
 
-# --- COLONNA 3: GRAFICO ---
 with col_dx:
     st.subheader("📊 Analisi Tecnica")
+    # Grafico con simbolo corretto per Milano
     chart_html = """
-    <div style="height:450px;">
+    <div style="height:400px;">
         <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
         <script type="text/javascript">
-        new TradingView.widget({
-          "autosize": true, "symbol": "MIL:LDO", "interval": "D",
-          "theme": "dark", "style": "1", "locale": "it", "timezone": "Etc/UTC"
-        });
+        new TradingView.widget({"autosize": true, "symbol": "MIL:LDO", "interval": "D", "theme": "dark", "style": "1", "locale": "it"});
         </script>
     </div>
     """
-    st.components.v1.html(chart_html, height=460)
+    st.components.v1.html(chart_html, height=420)
 
-# --- REFRESH AUTOMATICO ---
-st.sidebar.info("Il bot si aggiorna ogni 60s")
+# Refresh automatico 60s
 time.sleep(60)
 st.rerun()
