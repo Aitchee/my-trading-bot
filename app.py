@@ -7,7 +7,7 @@ st.set_page_config(page_title="AI Financial Terminal PRO", layout="wide")
 
 # --- 2. CONFIGURAZIONE PONTE GOOGLE ---
 # Incolla qui il tuo URL di Google Script (quello che finisce con /exec)
-GOOGLE_BRIDGE_URL = "INCOLLA_QUI_IL_TUO_URL_DI_GOOGLE"
+GOOGLE_BRIDGE_URL = "https://script.google.com/macros/s/AKfycbxO6mmU9uVUqTKtlmR9cIhJRB7B8jn9dPXwXnvRWVV4xPB2a_jAB0y9r_j61Nji1xTXHQ/exec"
 
 # --- 3. FUNZIONE RECUPERO DATI ---
 def recupera_dati():
@@ -126,3 +126,4 @@ with col_chart:
 # --- REFRESH ---
 time.sleep(60)
 st.rerun()
+
