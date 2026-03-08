@@ -1,84 +1,54 @@
-import streamlit as st
-import requests
-import time
-
-# --- 1. CONFIGURAZIONE PAGINA ---
-st.set_page_config(page_title="AI Trading Terminal PRO", layout="wide")
-
-# --- 2. CONFIGURAZIONE PONTE GOOGLE ---
-# Sostituisci con il tuo URL /exec
-GOOGLE_BRIDGE_URL = "https://script.google.com/macros/s/AKfycbxO6mmU9uVUqTKtlmR9cIhJRB7B8jn9dPXwXnvRWVV4xPB2a_jAB0y9r_j61Nji1xTXHQ/exec"
-
-# --- 3. FUNZIONE DI RECUPERO DATI ---
-def recupera_dati_globali():
-    if "GOOGLE" in GOOGLE_BRIDGE_URL:
-        return [], "URL_MANCANTE"
-    try:
-        r = requests.get(GOOGLE_BRIDGE_URL, timeout=20)
-        if r.status_code == 200:
-            res_json = r.json()
-            return res_json.get('data', []), 200
-        return [], r.status_code
-    except Exception as e:
-        return [], f"Errore: {str(e)[:20]}"
-
-# --- 4. INTERFACCIA UTENTE ---
-st.title("🚀 AI Financial Terminal")
-st.caption(f"Status Live | Proxy: Google Apps Script | {time.strftime('%H:%M:%S')}")
-
-col_port, col_ai, col_chart = st.columns([1, 1.2, 1.2])
-
 with col_port:
     st.subheader("💰 Portafoglio")
     data, status = recupera_dati_globali()
     
     if status == 200:
-        st.success("✅ Connesso")
-        found_eur = False
+        # 1. Visualizzazione Saldo Cash
         for wallet in data:
             attr = wallet.get('attributes', {})
             if attr.get('symbol') == 'EUR':
                 bal = float(attr.get('balance', 0))
-                st.metric("Saldo Disponibile (EUR)", f"{bal:.2f} €")
-                found_eur = True
-        if not found_eur:
-            st.info("Nessun saldo EUR rilevato.")
+                st.metric("Liquidità (EUR)", f"{bal:.2f} €")
+        
+        st.divider()
+        st.subheader("💼 Performance Asset")
+        
+        # 2. Tabella Asset con Gain/Loss
+        for wallet in data:
+            attr = wallet.get('attributes', {})
+            symbol = attr.get('symbol')
+            qty = float(attr.get('balance', 0))
+            
+            # Filtriamo solo gli asset che possiedi (escludendo l'Euro)
+            if qty > 0 and symbol != 'EUR':
+                # --- LOGICA CALCOLO P&L ---
+                # Nota: Bitpanda API v1 a volte non fornisce il 'buy_price' diretto.
+                # Qui usiamo un valore di esempio che potrai mappare con i tuoi dati reali.
+                prezzo_carico = float(attr.get('average_price', 0)) 
+                
+                # Simulo un prezzo attuale (In futuro lo prenderemo via API)
+                # Per ora facciamo una variazione fittizia per vedere la grafica
+                prezzo_attuale = prezzo_carico * 1.05 if prezzo_carico > 0 else 0
+                
+                if prezzo_carico > 0:
+                    gain_loss = ((prezzo_attuale - prezzo_carico) / prezzo_carico) * 100
+                    valore_attuale = qty * prezzo_attuale
+                    
+                    # Grafica personalizzata per ogni azione
+                    with st.container():
+                        c1, c2 = st.columns([1, 1])
+                        c1.write(f"**{symbol}**")
+                        c1.caption(f"Q.tà: {qty:.4f}")
+                        
+                        # Colore verde se in gain, rosso se in loss
+                        color = "normal" if gain_loss >= 0 else "inverse"
+                        c2.metric("Valore", f"{valore_attuale:.2f}€", f"{gain_loss:.2f}%", delta_color=color)
+                        st.divider()
+                else:
+                    # Se non abbiamo il prezzo di carico, mostriamo solo la quantità
+                    st.write(f"**{symbol}**")
+                    st.write(f"Quantità: {qty:.4f}")
+                    st.caption("Prezzo di carico non disponibile")
+                    st.divider()
     else:
-        st.error(f"⚠️ Errore: {status}")
-
-with col_ai:
-    st.subheader("🎯 Segnali AI Top 10")
-    monitorati = ["Bitcoin", "NVIDIA", "Tesla", "Apple", "Ferrari", "Leonardo"]
-    for m in monitorati:
-        with st.expander(f"Analisi {m}"):
-            st.write(f"Sentiment {m}: **RIALZISTA**")
-            st.button(f"Trade {m}", key=f"btn_{m}")
-
-with col_chart:
-    st.subheader("📊 Analisi Tecnica Leonardo")
-    # HTML del grafico - Qui è dove c'era l'errore di sintassi
-    chart_html = """
-    <div style="height:450px;">
-        <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
-        <script type="text/javascript">
-        new TradingView.widget({
-          "autosize": true,
-          "symbol": "MIL:LDO",
-          "interval": "D",
-          "timezone": "Etc/UTC",
-          "theme": "dark",
-          "style": "1",
-          "locale": "it",
-          "enable_publishing": false,
-          "allow_symbol_change": true,
-          "container_id": "tv_chart"
-        });
-        </script>
-    </div>
-    """
-    st.components.v1.html(chart_html, height=460)
-
-# --- 5. REFRESH ---
-time.sleep(60)
-st.rerun()
-
+        st.error(f"Errore: {status}")
