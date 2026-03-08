@@ -1,32 +1,31 @@
 import streamlit as st
 import requests
 
-st.set_page_config(page_title="BITPANDA TERMINAL", layout="wide")
+st.set_page_config(page_title="Terminal Operativo", layout="wide")
 
-BRIDGE_URL = "https://script.google.com/macros/s/AKfycbygLJWSdT0GSTw8qm_1uLOJswsB8J2EHjZ7SjZGpqesnKiTuCW_hx8CZKQF8Z-KkntsjQ/exec"
+# URL del tuo deployment di Google Script
+BRIDGE_URL = "https://script.google.com/macros/s/AKfycbxO6mmU9uVUqTKtlmR9cIhJRB7B8jn9dPXwXnvRWVV4xPB2a_jAB0y9r_j61Nji1xTXHQ/exec"
 
-st.header("💰 Portafoglio Reale Bitpanda")
+st.header("💰 Saldi Real-Time Bitpanda")
 
 if st.button("🔄 SINCRONIZZA ORA"):
-    st.rerun()
-
-try:
-    r = requests.get(BRIDGE_URL, timeout=15)
-    data = r.json().get('data', [])
-    
-    if not data:
-        st.error("Dati non ricevuti. Controlla che la Chiave API abbia i permessi 'Trading' e 'Read All'.")
-        st.json(r.json()) # Visualizza la risposta grezza per debug
-    else:
-        for item in data:
-            attr = item.get('attributes', {})
-            # Legge sia balance (fiat) che amount (stocks/crypto)
-            qty = float(attr.get('balance', 0) or attr.get('amount', 0) or 0)
-            if qty > 0:
-                nome = attr.get('name', 'N/A')
-                symbol = attr.get('symbol', '???')
-                st.subheader(f"{nome} ({symbol})")
-                st.title(f"{qty:.4f}")
-                st.write("---")
-except Exception as e:
-    st.error(f"Errore di rete: {e}")
+    try:
+        r = requests.get(BRIDGE_URL, timeout=15)
+        res = r.json()
+        assets = res.get('data', [])
+        
+        if not assets:
+            st.error("Il ponte è attivo ma Bitpanda non invia asset. Controlla i permessi della chiave API.")
+            st.json(res)
+        else:
+            for a in assets:
+                attr = a.get('attributes', {})
+                # Legge balance per fiat e amount per asset
+                val = float(attr.get('balance', 0) or attr.get('amount', 0) or 0)
+                if val > 0:
+                    symbol = attr.get('symbol', 'N/D')
+                    name = attr.get('name', symbol)
+                    st.write(f"🏷️ **{name}** ({symbol}): **{val:.4f}**")
+                    st.divider()
+    except Exception as e:
+        st.error(f"Errore di connessione: {e}")
