@@ -6,16 +6,17 @@ import time
 st.set_page_config(page_title="AI Trading Terminal PRO", layout="wide")
 
 # --- 2. CONFIGURAZIONE PONTE GOOGLE ---
-# Incolla qui il tuo URL di Google Script (quello che finisce con /exec)
-GOOGLE_BRIDGE_URL = "IL_TUO_URL_DI_GOOGLE_QUI"
+# Sostituisci con il tuo URL /exec
+GOOGLE_BRIDGE_URL = "INCOLLA_QUI_IL_TUO_URL_DI_GOOGLE"
 
 # --- 3. FUNZIONE DI RECUPERO DATI ---
 def recupera_dati_globali():
+    if "GOOGLE" in GOOGLE_BRIDGE_URL:
+        return [], "URL_MANCANTE"
     try:
         r = requests.get(GOOGLE_BRIDGE_URL, timeout=20)
         if r.status_code == 200:
             res_json = r.json()
-            # Restituisce la lista 'data' se presente, altrimenti una lista vuota
             return res_json.get('data', []), 200
         return [], r.status_code
     except Exception as e:
@@ -33,60 +34,50 @@ with col_port:
     
     if status == 200:
         st.success("✅ Connesso")
-        
-        eur_balance = 0.0
         found_eur = False
-        
-        # Scansione accurata di tutti i wallet ricevuti
         for wallet in data:
             attr = wallet.get('attributes', {})
-            symbol = attr.get('symbol')
-            
-            # Controllo Saldo Euro
-            if symbol == 'EUR':
-                eur_balance = float(attr.get('balance', 0))
-                st.metric("Saldo Disponibile (EUR)", f"{eur_balance:.2f} €")
+            if attr.get('symbol') == 'EUR':
+                bal = float(attr.get('balance', 0))
+                st.metric("Saldo Disponibile (EUR)", f"{bal:.2f} €")
                 found_eur = True
-        
         if not found_eur:
-            st.info("Nessun saldo EUR rilevato nel wallet.")
-
-        st.divider()
-        st.subheader("💼 Asset Digitali")
-        # Visualizziamo altri asset con saldo positivo
-        asset_found = False
-        for wallet in data:
-            attr = wallet.get('attributes', {})
-            bal = float(attr.get('balance', 0))
-            sym = attr.get('symbol')
-            if bal > 0 and sym != 'EUR':
-                st.write(f"**{sym}**: {bal:.4f}")
-                asset_found = True
-        
-        if not asset_found:
-            st.caption("Nessuna crypto o azione rilevata.")
-
+            st.info("Nessun saldo EUR rilevato.")
     else:
-        st.error(f"⚠️ Errore Connessione: {status}")
-        st.info("Verifica che la chiave Bitpanda sia corretta dentro Google Script.")
+        st.error(f"⚠️ Errore: {status}")
 
 with col_ai:
     st.subheader("🎯 Segnali AI Top 10")
-    monitorati = ["Bitcoin", "NVIDIA", "Tesla", "Apple", "Ferrari", "Amazon", "Microsoft", "Meta", "Eni", "Leonardo"]
-    
+    monitorati = ["Bitcoin", "NVIDIA", "Tesla", "Apple", "Ferrari", "Leonardo"]
     for m in monitorati:
         with st.expander(f"Analisi {m}"):
-            st.write(f"Sentiment attuale per {m}: **RIALZISTA**")
-            st.progress(0.85)
+            st.write(f"Sentiment {m}: **RIALZISTA**")
             st.button(f"Trade {m}", key=f"btn_{m}")
 
 with col_chart:
-    st.subheader("📊 Analisi Leonardo (Milano)")
-    # Widget TradingView stabile
+    st.subheader("📊 Analisi Tecnica Leonardo")
+    # HTML del grafico - Qui è dove c'era l'errore di sintassi
     chart_html = """
     <div style="height:450px;">
         <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
         <script type="text/javascript">
         new TradingView.widget({
-          "autosize": true, "symbol": "MIL:LDO", "interval": "D",
-          "theme": "dark", "style":
+          "autosize": true,
+          "symbol": "MIL:LDO",
+          "interval": "D",
+          "timezone": "Etc/UTC",
+          "theme": "dark",
+          "style": "1",
+          "locale": "it",
+          "enable_publishing": false,
+          "allow_symbol_change": true,
+          "container_id": "tv_chart"
+        });
+        </script>
+    </div>
+    """
+    st.components.v1.html(chart_html, height=460)
+
+# --- 5. REFRESH ---
+time.sleep(60)
+st.rerun()
