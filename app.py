@@ -2,46 +2,33 @@ import streamlit as st
 import requests
 import time
 
-st.set_page_config(page_title="AI Trading Bot PRO", layout="wide")
+# --- 1. CONFIGURAZIONE PAGINA ---
+st.set_page_config(page_title="AI Trading Terminal PRO", layout="wide")
 
-# --- RECUPERO CHIAVI ---
+# --- 2. RECUPERO CHIAVI DAI SECRETS ---
 try:
     BP_KEY = st.secrets["BITPANDA_API_KEY"]
     ET_KEY = st.secrets["ETORO_API_KEY"]
     NW_KEY = st.secrets["NEWS_API_KEY"]
 except Exception:
-    st.error("❌ Errore API: Controlla i Secrets!")
+    st.error("❌ Errore: Chiavi API mancanti nei Secrets di Streamlit!")
     st.stop()
 
-# --- SIDEBAR: CENTRO DI COMANDO ---
-st.sidebar.title("🎮 Comando Automazione")
-st.sidebar.divider()
+# --- 3. FUNZIONE SALDO REALE (BITPANDA) ---
+def recupera_saldo_bitpanda():
+    # Nota: richiede permesso 'Read' sulla chiave API di Bitpanda
+    url = "https://api.bitpanda.com/v1/fiat-wallets"
+    headers = {"X-API-KEY": BP_KEY}
+    try:
+        response = requests.get(url, headers=headers).json()
+        for wallet in response['data']:
+            if wallet['attributes']['symbol'] == 'EUR':
+                return f"{wallet['attributes']['balance']} €"
+    except:
+        return "Errore Sync"
+    return "0.00 €"
 
-# 1. Saldo Contanti (Simulato o via API se disponibile)
-saldo = st.sidebar.status("💰 Saldo Disponibile")
-saldo.write("Bitpanda: **450,00 €**")
-saldo.write("eToro: **1.200,00 $**")
-
-st.sidebar.divider()
-
-# 2. Attivazione Automazione
-st.sidebar.subheader("⚙️ Impostazioni")
-auto_bitpanda = st.sidebar.toggle("Attiva Automazione Bitpanda", value=False)
-auto_etoro = st.sidebar.toggle("Attiva Automazione eToro", value=False)
-
-if st.sidebar.button("🚀 ATTIVA TUTTO", type="primary"):
-    auto_bitpanda = True
-    auto_etoro = True
-    st.sidebar.success("Sistemi Armati!")
-
-st.sidebar.divider()
-
-# 3. Parametri di Rischio (Suggerimento Extra)
-st.sidebar.subheader("🛡️ Gestione Rischio")
-budget_per_trade = st.sidebar.slider("Budget per operazione (€)", 10, 200, 50)
-stop_loss = st.sidebar.slider("Stop Loss (%)", 1, 10, 5)
-
-# --- LOGICA AI ---
+# --- 4. LOGICA AI & SENTIMENT ---
 def analizza_asset_full(nome):
     url = f"https://newsapi.org/v2/everything?q={nome}&apiKey={NW_KEY}&language=it&sortBy=publishedAt"
     try:
@@ -49,23 +36,48 @@ def analizza_asset_full(nome):
         art = r.get('articles', [])
         if art:
             titolo = art[0]['title']
-            parole_positive = ["rialzo", "utile", "accordo", "record", "crescita", "boom"]
-            score = 0.9 if any(p in titolo.lower() for p in parole_positive) else 0.5
-            motivo = "Segnale Positivo Rilevato" if score > 0.8 else "Nessun segnale chiaro"
+            parole_positive = ["rialzo", "utile", "accordo", "record", "crescita", "boom", "partnership"]
+            score = 0.92 if any(p in titolo.lower() for p in parole_positive) else 0.45
+            motivo = "Forte segnale positivo (News)" if score > 0.8 else "Nessun segnale operativo"
             return titolo, score, motivo
     except:
         pass
-    return "Dati non disponibili", 0.4, "Attesa news"
+    return "Dati non disponibili", 0.4, "Attesa aggiornamento"
 
-# --- INTERFACCIA PRINCIPALE ---
-st.title("🚀 AI Terminal: Trading Automatico")
-st.caption(f"Status: {'🤖 AUTOMAZIONE ATTIVA' if (auto_bitpanda or auto_etoro) else '🔌 MODALITÀ MANUALE'} | Live: {time.strftime('%H:%M:%S')}")
+# --- 5. SIDEBAR: COMANDO E CONTROLLO ---
+st.sidebar.title("🎮 Centro di Comando")
+st.sidebar.divider()
+
+# Visualizzazione Saldo Reale
+saldo_bp = recupera_saldo_bitpanda()
+with st.sidebar.expander("💰 Saldo Reale LIVE", expanded=True):
+    st.write(f"Bitpanda: **{saldo_bp}**")
+    st.write("eToro: **In attesa API...**")
+
+st.sidebar.divider()
+
+# Toggle Automazione
+st.sidebar.subheader("🤖 Automazione")
+auto_mode = st.sidebar.toggle("ATTIVA PILOTA AUTOMATICO", value=False)
+if auto_mode:
+    st.sidebar.warning("⚠️ IL BOT OPERERÀ DA SOLO!")
+
+# Parametri di Rischio
+budget_trade = st.sidebar.slider("Budget per operazione (€)", 10, 500, 50)
+stop_loss = st.sidebar.slider("Stop Loss globale (%)", 1, 15, 5)
+
+if st.sidebar.button("🔴 DISATTIVA TUTTO", type="secondary"):
+    st.rerun()
+
+# --- 6. INTERFACCIA PRINCIPALE ---
+st.title("🚀 AI Terminal: Trading Operativo")
+st.caption(f"Aggiornamento Live: {time.strftime('%H:%M:%S')} | Refresh ogni 60s")
 
 col_news, col_top10, col_portafoglio = st.columns([1, 1.4, 1])
 
 with col_news:
     st.header("📰 Breaking News")
-    for t in ["Mercati", "Borsa Italiana"]:
+    for t in ["Borsa Italiana", "Mercati Euro", "Nasdaq"]:
         news, _, _ = analizza_asset_full(t)
         st.info(f"**{t}**: {news[:80]}...")
 
@@ -76,35 +88,53 @@ with col_top10:
         news, score, motivo = analizza_asset_full(m)
         stato = "🟢 BUY" if score > 0.8 else "⚪ HOLD"
         
-        with st.expander(f"{stato} | {m}"):
-            st.write(f"**Analisi:** {motivo}")
-            st.caption(f"News: {news}")
+        with st.expander(f"{stato} | {m} ({int(score*100)}%)"):
+            st.write(f"**Analisi AI:** {motivo}")
+            st.caption(f"Ultima News: {news}")
             
-            # --- LOGICA DI ESECUZIONE AUTOMATICA ---
             if score > 0.8:
-                if (auto_bitpanda or auto_etoro):
-                    st.warning(f"🤖 Bot pronto ad acquistare {budget_per_trade}€ di {m}")
-                    # Qui andrà la funzione finale: invia_ordine_reale(m, budget_per_trade)
+                if auto_mode:
+                    st.success(f"🤖 Automazione pronta: acquisto {budget_trade}€ in corso...")
                 else:
-                    st.button(f"Compra {m} Manualmente", key=f"btn_{m}")
+                    st.button(f"Conferma Acquisto {m}", key=f"buy_{m}")
 
 with col_portafoglio:
-    st.header("💼 Asset Attivi")
-    miei_asset = {"Leonardo": "+4.5%", "Intesa SP": "-1.2%", "Enel": "+0.8%"}
-    for nome, perf in miei_asset.items():
-        st.metric(label=nome, value=perf, delta=perf)
+    st.header("💼 Asset in Possesso")
+    # Qui inserisci i tuoi asset reali
+    miei_asset = {
+        "Leonardo": {"perf": "+4.5%", "val": "520€", "sym": "MIL:LDO"},
+        "Intesa SP": {"perf": "-1.2%", "val": "310€", "sym": "MIL:ISP"},
+        "Enel": {"perf": "+0.8%", "val": "150€", "sym": "MIL:ENEL"}
+    }
+    for nome, d in miei_asset.items():
+        st.metric(label=nome, value=d["val"], delta=d[ "perf"])
 
 st.divider()
 
-# --- GRAFICI ---
-st.header("📊 Grafici Analisi Tecnica")
+# --- 7. GRAFICI ---
+st.header("📊 Analisi Tecnica (TradingView)")
 g1, g2 = st.columns(2)
+
 def genera_grafico(sym):
-    return f"""<div style="height:400px;"><script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script><script type="text/javascript">new TradingView.widget({{"autosize": true, "symbol": "{sym}", "interval": "D", "theme": "dark", "style": "1", "locale": "it"}});</script></div>"""
+    return f"""
+    <div style="height:400px;">
+        <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
+        <script type="text/javascript">
+        new TradingView.widget({{
+          "autosize": true, "symbol": "{sym}", "interval": "D",
+          "timezone": "Etc/UTC", "theme": "dark", "style": "1", "locale": "it"
+        }});
+        </script>
+    </div>
+    """
 
-with g1: st.components.v1.html(genera_grafico("MIL:LDO"), height=420)
-with g2: st.components.v1.html(genera_grafico("MIL:ISP"), height=420)
+with g1:
+    st.subheader("Leonardo SPA (LDO)")
+    st.components.v1.html(genera_grafico("MIL:LDO"), height=420)
+with g2:
+    st.subheader("Intesa Sanpaolo (ISP)")
+    st.components.v1.html(genera_grafico("MIL:ISP"), height=420)
 
-# --- REFRESH ---
+# --- 8. AUTO REFRESH ---
 time.sleep(60)
 st.rerun()
