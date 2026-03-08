@@ -5,13 +5,26 @@ import requests
 st.set_page_config(page_title="AI Trading Bot 2026", layout="wide")
 
 # 2. Controllo Segreti (Devono esserci tutti e 3)
-try:
-    BP_KEY = st.secrets["d88c80faa21f3a890bff52acf8d2ffbb1ef21830332be28d03bd1e23c20bf5e14e5635b804fe92468af408dfa06fc890f88b6783829b3fda503f9ea486c512b2"]
-    ET_KEY = st.secrets["eyJjaSI6IjYwY2FiYjBiLTU1OTctNDQ4NS04ZjYzLTdlOWUwNTZlMGJiOCIsImVhbiI6IlVucmVnaXN0ZXJlZEFwcGxpY2F0aW9uIiwiZWsiOiJmNXJWdkt4TC5YSWhHZUd2dUNKNnlxalpBWFJiNHdKLWFselV4SGNvdXRSQ3Rld0FPTmhBWU1ETXJmelNPM0lySzZKZGR1ZmQwZGw5amdCaXlZRVFLUUpqZmdVbXdRV2Utc3NwQ095MjhvNF8ifQ__"]
-    NW_KEY = st.secrets["f47b85db22664beba249feed052403c3"]
-except Exception:
-    st.error("❌ Errore: Controlla i Secrets! Mancano le chiavi di Bitpanda, eToro o NewsAPI.")
+
+# Sostituisci il vecchio blocco 'try' con questo:
+BP_KEY = st.secrets.get("d88c80faa21f3a890bff52acf8d2ffbb1ef21830332be28d03bd1e23c20bf5e14e5635b804fe92468af408dfa06fc890f88b6783829b3fda503f9ea486c512b2", "MANCANTE")
+ET_KEY = st.secrets.get("eyJjaSI6IjYwY2FiYjBiLTU1OTctNDQ4NS04ZjYzLTdlOWUwNTZlMGJiOCIsImVhbiI6IlVucmVnaXN0ZXJlZEFwcGxpY2F0aW9uIiwiZWsiOiJmNXJWdkt4TC5YSWhHZUd2dUNKNnlxalpBWFJiNHdKLWFselV4SGNvdXRSQ3Rld0FPTmhBWU1ETXJmelNPM0lySzZKZGR1ZmQwZGw5amdCaXlZRVFLUUpqZmdVbXdRV2Utc3NwQ095MjhvNF8ifQ__", "MANCANTE")
+NW_KEY = st.secrets.get("f47b85db22664beba249feed052403c3", "MANCANTE")
+
+if "MANCANTE" in [BP_KEY, ET_KEY, NW_KEY]:
+    st.error("⚠️ Configurazione incompleta nei Secrets:")
+    if BP_KEY == "MANCANTE": st.write("- Manca: BITPANDA_API_KEY")
+    if ET_KEY == "MANCANTE": st.write("- Manca: ETORO_API_KEY")
+    if NW_KEY == "MANCANTE": st.write("- Manca: NEWS_API_KEY")
     st.stop()
+
+# try:
+#     BP_KEY = st.secrets["d88c80faa21f3a890bff52acf8d2ffbb1ef21830332be28d03bd1e23c20bf5e14e5635b804fe92468af408dfa06fc890f88b6783829b3fda503f9ea486c512b2"]
+#     ET_KEY = st.secrets["eyJjaSI6IjYwY2FiYjBiLTU1OTctNDQ4NS04ZjYzLTdlOWUwNTZlMGJiOCIsImVhbiI6IlVucmVnaXN0ZXJlZEFwcGxpY2F0aW9uIiwiZWsiOiJmNXJWdkt4TC5YSWhHZUd2dUNKNnlxalpBWFJiNHdKLWFselV4SGNvdXRSQ3Rld0FPTmhBWU1ETXJmelNPM0lySzZKZGR1ZmQwZGw5amdCaXlZRVFLUUpqZmdVbXdRV2Utc3NwQ095MjhvNF8ifQ__"]
+#     NW_KEY = st.secrets["f47b85db22664beba249feed052403c3"]
+# except Exception:
+#     st.error("❌ Errore: Controlla i Secrets! Mancano le chiavi di Bitpanda, eToro o NewsAPI.")
+#     st.stop()
 
 st.title("🤖 Dashboard Multi-Platform: eToro & Bitpanda")
 
@@ -55,3 +68,4 @@ st.sidebar.title("Stato Sistema")
 st.sidebar.write(f"API eToro: ✅")
 st.sidebar.write(f"API Bitpanda: ✅")
 st.sidebar.write(f"Target Rendimento: **10%**")
+
