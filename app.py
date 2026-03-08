@@ -51,13 +51,14 @@ st.title("🤖 Bot di Trading Operativo")
 
 # --- 1. RECUPERO CHIAVI (Versione Ultra-Pulita) ---
 # Usiamo .strip() per eliminare spazi invisibili che bloccano tutto
+# --- CODICE CORRETTO DA METTERE SU GITHUB ---
 try:
-    BP_KEY = st.secrets["d88c80faa21f3a890bff52acf8d2ffbb1ef21830332be28d03bd1e23c20bf5e14e5635b804fe92468af408dfa06fc890f88b6783829b3fda503f9ea486c512b2"].strip()
-    ET_KEY = st.secrets["eyJjaSI6IjYwY2FiYjBiLTU1OTctNDQ4NS04ZjYzLTdlOWUwNTZlMGJiOCIsImVhbiI6IlVucmVnaXN0ZXJlZEFwcGxpY2F0aW9uIiwiZWsiOiJmNXJWdkt4TC5YSWhHZUd2dUNKNnlxalpBWFJiNHdKLWFselV4SGNvdXRSQ3Rld0FPTmhBWU1ETXJmelNPM0lySzZKZGR1ZmQwZGw5amdCaXlZRVFLUUpqZmdVbXdRV2Utc3NwQ095MjhvNF8ifQ__"].strip()
-    NW_KEY = st.secrets["f47b85db22664beba249feed052403c3"].strip()
+    BP_KEY = st.secrets["d88c80faa21f3a890bff52acf8d2ffbb1ef21830332be28d03bd1e23c20bf5e14e5635b804fe92468af408dfa06fc890f88b6783829b3fda503f9ea486c512b2"]
+    ET_KEY = st.secrets["eyJjaSI6IjYwY2FiYjBiLTU1OTctNDQ4NS04ZjYzLTdlOWUwNTZlMGJiOCIsImVhbiI6IlVucmVnaXN0ZXJlZEFwcGxpY2F0aW9uIiwiZWsiOiJmNXJWdkt4TC5YSWhHZUd2dUNKNnlxalpBWFJiNHdKLWFselV4SGNvdXRSQ3Rld0FPTmhBWU1ETXJmelNPM0lySzZKZGR1ZmQwZGw5amdCaXlZRVFLUUpqZmdVbXdRV2Utc3NwQ095MjhvNF8ifQ__"]
+    NW_KEY = st.secrets["f47b85db22664beba249feed052403c3"]
     st.sidebar.success("✅ Connessione API Stabilita")
 except Exception as e:
-    st.error(f"❌ Errore critico nel caricamento: {e}")
+    st.error(f"❌ Errore: Il codice cerca il nome sbagliato nei Secrets. Dettaglio: {e}")
     st.stop()
 
 # --- 2. FUNZIONE NEWS ---
@@ -87,4 +88,5 @@ with col2:
     st.metric("Budget Iniziale", "1.000 €", "Target +10%")
     st.write("Broker 1: Bitpanda ✅")
     st.write("Broker 2: eToro ✅")
+
 
