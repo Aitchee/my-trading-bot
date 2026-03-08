@@ -2,10 +2,9 @@ import streamlit as st
 import requests
 import datetime
 
-# 1. Configurazione Interfaccia
 st.set_page_config(page_title="AI Terminal PRO", layout="wide")
 
-# Link Google Bridge Fisso
+# Link Google Bridge aggiornato
 BRIDGE_URL = "https://script.google.com/macros/s/AKfycbygLJWSdT0GSTw8qm_1uLOJswsB8J2EHjZ7SjZGpqesnKiTuCW_hx8CZKQF8Z-KkntsjQ/exec"
 
 def recupera_dati():
@@ -15,20 +14,15 @@ def recupera_dati():
             return r.json().get('data', []), 200
         return [], r.status_code
     except:
-        return [], "Errore Connessione"
+        return [], "Errore Bridge"
 
-# 2. Header Dashboard
 st.title("🚀 AI Financial Terminal")
-col_h1, col_h2 = st.columns([3, 1])
-with col_h1:
-    st.caption(f"Ultimo aggiornamento live: {datetime.datetime.now().strftime('%H:%M:%S')}")
-with col_h2:
-    if st.button("🔄 SINCRONIZZA ORA"):
-        st.rerun()
+st.caption(f"Status Live | Portfolio Scanner | {datetime.datetime.now().strftime('%H:%M:%S')}")
+
+if st.button("🔄 SINCRONIZZA PORTAFOGLIO"):
+    st.rerun()
 
 st.divider()
-
-# 3. Layout a tre colonne
 col_sx, col_cx, col_dx = st.columns([1.5, 1, 1.2])
 
 with col_sx:
@@ -45,7 +39,7 @@ with col_sx:
             if qty > 0:
                 found = True
                 nomi = {"LDO": "Leonardo", "ISP": "Intesa SP", "AMZN": "Amazon", "NVDA": "NVIDIA", "AAPL": "Apple", "MSFT": "Microsoft", "EUR": "Liquidità Euro"}
-                nome_asset = nomi.get(symbol, attr.get('name', symbol))
+                nome_asset = nomi.get(symbol, symbol)
                 
                 with st.container():
                     c1, c2 = st.columns([2, 1])
@@ -57,26 +51,23 @@ with col_sx:
                         c2.metric("Q.tà", f"{qty:.4f}")
                         if pmc > 0: st.caption(f"Pmc: {pmc:.2f} €")
                     st.divider()
-        if not found:
-            st.warning("Nessun asset con saldo positivo rilevato.")
     else:
-        st.error(f"Status Bridge: {status}")
-        st.info("💡 Assicurati di aver creato una 'Nuova Versione' su Google Script.")
+        st.warning("In attesa di dati reali... Se hai aggiornato Google, premi Sincronizza.")
 
 with col_cx:
     st.subheader("🎯 Segnali AI Top 10")
     for a in ["Leonardo", "Intesa SP", "Amazon", "NVIDIA"]:
         with st.expander(f"Analisi {a}"):
-            st.write("Sentiment: **RIALZISTA (88%)**")
-            st.button(f"Trade {a}", key=f"btn_{a}")
+            st.write("Sentiment: **RIALZISTA**")
+            st.button(f"Analisi {a}", key=a)
 
 with col_dx:
-    st.subheader("📊 Grafico Leonardo (MIL)")
-    st.components.v1.html("""
+    st.subheader("📊 Analisi Tecnica")
+    st.components.v1.html(f"""
         <div style="height:450px;">
         <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
         <script type="text/javascript">
-        new TradingView.widget({"autosize":true,"symbol":"MIL:LDO","interval":"D","theme":"dark","style":"1","locale":"it"});
+        new TradingView.widget({{"autosize":true,"symbol":"MIL:LDO","interval":"D","theme":"dark","style":"1","locale":"it"}});
         </script>
         </div>
     """, height=460)
