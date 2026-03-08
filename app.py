@@ -5,7 +5,7 @@ from datetime import datetime
 st.set_page_config(page_title="EDOARDO TERMINAL", layout="wide")
 
 # Recupero chiave (Assicurati che sia quella NUOVA e segreta)
-RAW_KEY = st.secrets.get("BITPANDA_API_KEY", "967415a90b90a43d4b70bcea49132d148ed52807b405c2e0e63535312b48ceecd005e7f8c432b8721c855bc5b79d3978c19be94a3583a9bd1ec36fa8a7437ac7")
+RAW_KEY = st.secrets.get("BITPANDA_API_KEY", "881aefd79878522f1b565cd8003b25df0cf1455654f73240edfc50ccae1ca8d4b4d4f218af699a84ce08b8c4b03019edf361986d3023f877673bff3e28610518")
 BITPANDA_KEY = RAW_KEY.strip().replace('"', '').replace("'", "")
 
 def check_bitpanda():
@@ -49,3 +49,4 @@ else:
     2. Hai messo la spunta su **'Balance'** e **'Trading'**?
     3. Hai salvato i **Secrets** su Streamlit dopo aver incollato la chiave?
     """)
+
