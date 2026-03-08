@@ -2,24 +2,24 @@ import streamlit as st
 import requests
 import time
 
-# 1. Setup Pagina
-st.set_page_config(page_title="Trading Terminal AI", layout="wide")
+# --- SETUP PAGINA ---
+st.set_page_config(page_title="AI Financial Terminal", layout="wide")
 
-# 2. Recupero Chiavi Pulito
+# --- RECUPERO CHIAVI ---
 try:
-    # Pulizia forzata di ogni possibile carattere sporco nelle chiavi
-    BP_KEY = str(st.secrets["BITPANDA_API_KEY"]).replace('"', '').replace("'", "").strip()
-    NW_KEY = str(st.secrets["NEWS_API_KEY"]).replace('"', '').replace("'", "").strip()
+    # Pulizia profonda delle chiavi da spazi o virgolette extra
+    BP_KEY = str(st.secrets["BITPANDA_API_KEY"]).strip().replace('"', '').replace("'", "")
+    NW_KEY = str(st.secrets["NEWS_API_KEY"]).strip().replace('"', '').replace("'", "")
 except Exception as e:
-    st.error(f"Errore critico Secrets: {e}")
+    st.error("Configura le chiavi nei Secrets di Streamlit")
     st.stop()
 
-# 3. Funzioni Dati (con gestione errori per non rompere la grafica)
-def get_bitpanda_data(endpoint):
+# --- FUNZIONE API ---
+def get_data(endpoint):
     url = f"https://api.bitpanda.com/v1/{endpoint}"
     headers = {"X-API-KEY": BP_KEY}
     try:
-        r = requests.get(url, headers=headers, timeout=5)
+        r = requests.get(url, headers=headers, timeout=10)
         if r.status_code == 200:
             return r.json().get('data', []), 200
         return [], r.status_code
@@ -28,66 +28,58 @@ def get_bitpanda_data(endpoint):
 
 # --- INTERFACCIA ---
 st.title("🚀 AI Financial Terminal")
-st.caption(f"Status Live | Ultimo Refresh: {time.strftime('%H:%M:%S')}")
+st.caption(f"Aggiornamento Live | {time.strftime('%H:%M:%S')}")
 
-# Creazione Colonne Fisse
-col_saldo, col_signals, col_graph = st.columns([1, 1.2, 1.2])
+col_sx, col_cx, col_dx = st.columns([1, 1.2, 1.2])
 
-with col_saldo:
+with col_sx:
     st.subheader("💰 Portafoglio")
+    fiat_wallets, status = get_data("fiat-wallets")
     
-    # Recupero Saldo
-    fiat_data, status = get_bitpanda_data("fiat-wallets")
     if status == 200:
-        for w in fiat_data:
+        for w in fiat_wallets:
             if w['attributes']['symbol'] == 'EUR':
                 st.metric("Saldo Euro", f"{float(w['attributes']['balance']):.2f} €")
     else:
-        st.error(f"Errore API Bitpanda: {status}")
-        st.info("💡 Verifica che la chiave nei Secrets sia identica a quella su Bitpanda (senza spazi).")
+        st.error(f"Bitpanda API Error: {status}")
+        st.info("Se vedi 401: la chiave è errata. Se vedi 403: mancano permessi 'Read' sulla chiave.")
 
     st.divider()
     st.subheader("💼 Asset Reali")
-    asset_data, _ = get_bitpanda_data("asset-wallets")
-    found = False
-    for a in asset_data:
-        bal = float(a['attributes']['balance'])
-        if bal > 0.0001:
-            st.write(f"**{a['attributes']['cryptocoin_symbol']}**: {bal:.4f}")
-            found = True
-    if not found and status == 200: st.write("Nessun asset nel portafoglio.")
+    # Protezione riga 54: carichiamo asset solo se lo status è OK
+    if status == 200:
+        assets, _ = get_data("asset-wallets")
+        found = False
+        for a in assets:
+            bal = float(a['attributes']['balance'])
+            if bal > 0.0001:
+                st.write(f"**{a['attributes']['cryptocoin_symbol']}**: {bal:.4f}")
+                found = True
+        if not found: st.write("Nessun asset trovato.")
+    else:
+        st.warning("In attesa di connessione valida...")
 
-with col_signals:
-    st.subheader("🎯 Top 10 Segnali AI")
-    monitorati = ["Bitcoin", "NVIDIA", "Tesla", "Ferrari", "Apple", "Amazon", "Microsoft", "Meta", "Google", "Enel"]
-    
+with col_cx:
+    st.subheader("🎯 Segnali AI Top 10")
+    # Qui usiamo la tua News API
+    monitorati = ["Bitcoin", "NVIDIA", "Tesla", "Ferrari", "Apple"]
     for m in monitorati:
         with st.expander(f"Analisi {m}"):
-            st.write(f"Ricerca news in corso per {m}...")
-            st.button("Forza Acquisto", key=f"buy_{m}")
+            st.write(f"News sentiment per {m}...")
+            st.button(f"Trade {m}", key=m)
 
-with col_graph:
-    st.subheader("📊 Grafico Real-Time")
-    # Widget TradingView con protezione altezza
+with col_dx:
+    st.subheader("📊 Grafico Leonardo")
     chart_html = """
-    <div style="height:450px;">
+    <div style="height:400px;">
         <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
         <script type="text/javascript">
-        new TradingView.widget({
-          "autosize": true, "symbol": "MIL:LDO", "interval": "D",
-          "timezone": "Etc/UTC", "theme": "dark", "style": "1", "locale": "it",
-          "enable_publishing": false, "hide_top_toolbar": false, "save_image": false
-        });
+        new TradingView.widget({"autosize": true, "symbol": "MIL:LDO", "interval": "D", "theme": "dark", "style": "1", "locale": "it"});
         </script>
     </div>
     """
-    st.components.v1.html(chart_html, height=460)
+    st.components.v1.html(chart_html, height=420)
 
-# Sidebar di controllo
-st.sidebar.header("⚙️ Bot Settings")
-auto = st.sidebar.toggle("Pilota Automatico")
-st.sidebar.info("Il bot si aggiorna ogni 60s")
-
-# Refresh automatico
+# Refresh automatico ogni 60 secondi
 time.sleep(60)
 st.rerun()
