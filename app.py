@@ -4,7 +4,7 @@ import datetime
 
 st.set_page_config(page_title="AI Terminal PRO", layout="wide")
 
-GOOGLE_BRIDGE_URL = "https://script.google.com/macros/s/AKfycbxO6mmU9uVUqTKtlmR9cIhJRB7B8jn9dPXwXnvRWVV4xPB2a_jAB0y9r_j61Nji1xTXHQ/exec"
+GOOGLE_BRIDGE_URL = "https://script.google.com/macros/s/AKfycbygLJWSdT0GSTw8qm_1uLOJswsB8J2EHjZ7SjZGpqesnKiTuCW_hx8CZKQF8Z-KkntsjQ/exec"
 
 def recupera_dati():
     try:
@@ -77,3 +77,4 @@ with col_dx:
         </script>
         </div>
     """, height=460)
+
