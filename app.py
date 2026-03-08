@@ -1,36 +1,76 @@
 import streamlit as st
+import requests
+from datetime import datetime
+from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
+from streamlit_autorefresh import st_autorefresh
 
-st.set_page_config(page_title="DEBUG CHIAVE EDOARDO", layout="wide")
+# 1. SETUP & REFRESH
+st.set_page_config(page_title="EDOARDO TERMINAL DEBUG", layout="wide")
+st_autorefresh(interval=15000, key="debug_refresh_v9") # 15 secondi per non saturare
 
-st.title("🔍 Scanner Segreti Streamlit")
+# 2. RECUPERO E PULIZIA (Trasparente)
+RAW_KEY = st.secrets.get("BITPANDA_API_KEY", "CHIAVE_NON_TROVATA")
+BITPANDA_KEY = RAW_KEY.strip().replace('"', '').replace("'", "")
+NEWS_KEY = st.secrets.get("NEWS_API_KEY", "f47b85db22664beba249feed052403c3")
 
-# 1. Recupero grezzo (quello che Streamlit vede)
-raw_key = st.secrets.get("BITPANDA_API_KEY", "NON TROVATA")
+analyzer = SentimentIntensityAnalyzer()
 
-# 2. Pulizia (quello che il codice usa)
-clean_key = raw_key.strip().replace('"', '').replace("'", "")
+# --- INTERFACCIA ---
+st.title(f"🚀 TERMINALE DEBUG - {datetime.now().strftime('%H:%M:%S')}")
 
-st.subheader("1. Chiave Rilevata nei Secrets:")
-if raw_key == "NON TROVATA":
-    st.error("❌ Errore: Non ho trovato nessuna voce 'BITPANDA_API_KEY' nei Secrets.")
-else:
-    # Stampiamo la chiave in un box di codice per vederla bene
-    st.code(raw_key, language="text")
-    st.info(f"Lunghezza totale: {len(raw_key)} caratteri")
+# SEZIONE DEBUG CHIAVE
+with st.expander("🔍 DEBUG: Cosa sta leggendo il codice?", expanded=True):
+    st.write("**Chiave rilevata nei Secrets (Grezza):**")
+    st.code(f"[{RAW_KEY}]", language="text")
+    st.write("**Chiave pulita inviata a Bitpanda:**")
+    st.code(BITPANDA_KEY, language="text")
+    st.write(f"Lunghezza: {len(BITPANDA_KEY)} caratteri")
 
-st.divider()
+col_left, col_right = st.columns([1, 1])
 
-st.subheader("2. Chiave Pulita (Pronta per il codice):")
-st.code(clean_key, language="text")
+with col_left:
+    st.header("💰 Connessione Bitpanda")
+    
+    if not BITPANDA_KEY or BITPANDA_KEY == "CHIAVE_NON_TROVATA":
+        st.error("Manca la chiave nei Secrets!")
+    else:
+        # TENTATIVO DI CONNESSIONE
+        url = "https://api.bitpanda.com/v1/fiat-wallets"
+        headers = {"X-API-KEY": BITPANDA_KEY, "Accept": "application/json"}
+        
+        try:
+            response = requests.get(url, headers=headers, timeout=10)
+            
+            st.write(f"**Status Code:** {response.status_code}")
+            
+            # STAMPA TUTTO QUELLO CHE RICEVIAMO
+            st.write("**Risposta Integrale dal Server:**")
+            st.json(response.text) # Qui vedrai l'errore esatto se fallisce
+            
+            if response.status_code == 200:
+                st.success("✅ CONNESSIONE RIUSCITA!")
+                data = response.json().get('data', [])
+                for item in data:
+                    attr = item.get('attributes', {})
+                    bal = float(attr.get('balance', 0))
+                    if bal > 0:
+                        st.metric(f"{attr.get('name')}", f"€ {bal:.2f}")
+            elif response.status_code == 401:
+                st.error("❌ 401: Accesso negato. La chiave non è valida per Bitpanda.")
+        except Exception as e:
+            st.error(f"Errore di rete: {str(e)}")
 
-st.divider()
-
-st.subheader("📝 Check-list per te:")
-st.markdown(f"""
-1. **Confronto:** La stringa qui sopra è IDENTICA a quella che hai su Bitpanda?
-2. **Spazi:** Se selezioni il testo nel box sopra, vedi spazi vuoti all'inizio o alla fine? (La lunghezza corretta per Bitpanda è solitamente **128** caratteri).
-3. **Virgolette:** Vedi delle virgolette `"` o `'` dentro il box? Se sì, cancellale dai Secrets, non devono esserci.
-""")
-
-if st.button("RIFA SCAN (Dopo che hai salvato i Secrets)"):
-    st.rerun()
+with col_right:
+    st.header("🎯 Analisi News AI")
+    try:
+        n_url = f"https://newsapi.org/v2/top-headlines?category=business&apiKey={NEWS_KEY}&language=en"
+        articles = requests.get(n_url).json().get('articles', [])
+        for asset in ["Gold", "Bitcoin"]:
+            rel = [a for a in articles if asset.lower() in (a['title'] or "").lower()]
+            if rel:
+                score = analyzer.polarity_scores(rel[0]['title'])['compound']
+                if score > 0.1: st.success(f"BUY {asset}")
+                elif score < -0.1: st.error(f"SELL {asset}")
+                else: st.warning(f"WAIT {asset}")
+    except:
+        st.write("News offline.")
