@@ -1,56 +1,77 @@
 import streamlit as st
 import requests
-import datetime
 
-# --- CONFIGURAZIONE ---
-st.set_page_config(page_title="AI Terminal PRO", layout="wide")
+# Configurazione base per evitare che la pagina appaia vuota
+st.set_page_config(page_title="AI Terminal", layout="wide")
 
-# METTI QUI IL LINK CHE HAI APPENA COPIATO DA GOOGLE
+# --- 1. CONFIGURAZIONE URL ---
+# Incolla qui il link che hai appena copiato da Google (deve finire con /exec)
 BRIDGE_URL = "https://script.google.com/macros/s/AKfycbygLJWSdT0GSTw8qm_1uLOJswsB8J2EHjZ7SjZGpqesnKiTuCW_hx8CZKQF8Z-KkntsjQ/exec"
 
+st.title("🚀 AI Financial Terminal")
+st.write("---")
+
+# --- 2. RECUPERO DATI ---
 def recupera_dati():
+    if "INCOLLA" in BRIDGE_URL:
+        return None, "Manca l'URL di Google nel codice Python"
     try:
         r = requests.get(BRIDGE_URL, timeout=15)
         if r.status_code == 200:
-            return r.json().get('data', []), 200
-        return [], r.status_code
+            return r.json().get('data', []), "OK"
+        else:
+            return None, f"Errore Google: {r.status_code}"
     except Exception as e:
-        return [], f"Errore: {str(e)[:20]}"
+        return None, f"Errore Connessione: {str(e)}"
 
-# --- INTERFACCIA ---
-st.title("🚀 AI Financial Terminal")
-col_h1, col_h2 = st.columns([3, 1])
-with col_h1:
-    st.caption(f"Ultimo aggiornamento: {datetime.datetime.now().strftime('%H:%M:%S')}")
-with col_h2:
-    if st.button("🔄 SINCRONIZZA ORA"):
-        st.rerun()
+# --- 3. LAYOUT ---
+col_port, col_chart = st.columns([1, 1.5])
 
-st.divider()
-col_sx, col_cx, col_dx = st.columns([1.5, 1, 1.2])
-
-with col_sx:
+with col_port:
     st.subheader("💰 Portafoglio")
+    
+    # Se premo il tasto, forzo il ricaricamento
+    if st.button("Aggiorna Saldi"):
+        st.rerun()
+    
     data, status = recupera_dati()
     
-    if status == 200:
-        if len(data) > 0:
+    if status == "OK":
+        if data and len(data) > 0:
             for item in data:
                 attr = item.get('attributes', {})
+                # Cerca il saldo in diversi campi possibili
                 qty = float(attr.get('balance', 0) or attr.get('amount', 0) or 0)
                 symbol = attr.get('symbol', '')
+                
                 if qty > 0:
-                    nomi = {"LDO": "Leonardo", "ISP": "Intesa SP", "AMZN": "Amazon", "EUR": "Euro"}
-                    nome = nomi.get(symbol, symbol)
-                    st.metric(nome, f"{qty:.4f} {symbol}")
-                    st.divider()
+                    st.metric(label=symbol, value=f"{qty:.4f}")
+                    st.write("---")
         else:
-            st.warning("⚠️ Collegato, ma Bitpanda restituisce un portafoglio vuoto.")
-            st.info("Controlla di aver creato una 'Nuova Versione' nello script di Google.")
+            st.warning("⚠️ Connesso a Bitpanda, ma il portafoglio risulta vuoto.")
+            st.info("Verifica di aver creato una 'Nuova Versione' su Google Script.")
     else:
-        st.error(f"Status Errore: {status}")
+        st.error(f"❌ Errore: {status}")
 
-with col_dx:
-    st.subheader("📊 Grafico Leonardo")
-    chart_html = '<div style="height:450px;"><script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script><script type="text/javascript">new TradingView.widget({"autosize":true,"symbol":"MIL:LDO","interval":"D","theme":"dark","style":"1","locale":"it"});</script></div>'
-    st.components.v1.html(chart_html, height=460)
+with col_chart:
+    st.subheader("📊 Grafico Leonardo (LDO)")
+    # Grafico TradingView forzato
+    chart_html = """
+    <div style="height:500px;">
+        <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
+        <script type="text/javascript">
+        new TradingView.widget({
+          "autosize": true,
+          "symbol": "MIL:LDO",
+          "interval": "D",
+          "theme": "dark",
+          "style": "1",
+          "locale": "it",
+          "enable_publishing": false,
+          "allow_symbol_change": true,
+          "container_id": "tv_chart_1"
+        });
+        </script>
+    </div>
+    """
+    st.components.v1.html(chart_html, height=520)
