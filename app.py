@@ -5,90 +5,123 @@ from datetime import datetime
 from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
 from streamlit_autorefresh import st_autorefresh
 
-st_autorefresh(interval=10000, key="datarefresh")
-st.set_page_config(page_title="EDOARDO LIVE TERMINAL", layout="wide")
+# --- CONFIGURAZIONE LIVE ---
+st.set_page_config(page_title="EDOARDO AI TERMINAL", layout="wide")
+st_autorefresh(interval=10000, key="datarefresh") # Refresh 10 secondi
 
-# Recupero chiavi
-NEWS_KEY = st.secrets.get("NEWS_API_KEY", "").strip()
-ETORO_KEY = st.secrets.get("ETORO_API_KEY", "").strip()
+# Recupero variabili dai Secrets
+# Usiamo nomi consistenti per evitare NameError
+NEWS_TOKEN = st.secrets.get("NEWS_API_KEY", "").strip()
+ETORO_TOKEN = st.secrets.get("ETORO_API_KEY", "").strip()
 
 analyzer = SentimentIntensityAnalyzer()
 
-def get_etoro_data():
-    if not ETORO_KEY:
-        return "MISSING_KEY"
+# --- FUNZIONE SCOPERTA ACCOUNT & SALDO ---
+def fetch_live_etoro():
+    if not ETORO_TOKEN:
+        return "CHIAVE_MANCANTE"
 
     headers = {
-        "Authorization": f"Bearer {ETORO_API_KEY}",
+        "Authorization": f"Bearer {ETORO_TOKEN}",
         "Content-Type": "application/json",
         "X-Accept-Version": "v1"
     }
 
     try:
-        # STEP 1: Chiediamo all'API chi siamo (User Discovery)
-        # Questo endpoint serve a trovare l'ID numerico partendo dal Token
-        user_info_res = requests.get("https://api.etoro.com/v1/users/me", headers=headers, timeout=10)
+        # 1. Identifichiamo l'ID dell'utente dal Token (Auto-discovery)
+        user_res = requests.get("https://api.etoro.com/v1/users/me", headers=headers, timeout=10)
         
-        if user_info_res.status_code != 200:
-            return f"Errore Autenticazione: {user_info_res.status_code}"
+        if user_res.status_code != 200:
+            return f"Errore Auth: {user_res.status_code}"
         
-        user_data = user_info_res.json()
-        # Estraiamo l'ID numerico che eToro ti nasconde
-        real_id = user_data.get('cid') or user_data.get('accountID')
+        user_info = user_res.json()
+        # Estraiamo l'ID numerico reale (cid)
+        internal_id = user_info.get('cid') or user_info.get('accountID')
         
-        # STEP 2: Usiamo l'ID trovato per prendere il saldo
-        url_balance = f"https://api.etoro.com/v1/accounts/{real_id}/balance"
-        balance_res = requests.get(url_balance, headers=headers, timeout=10)
+        # 2. Recuperiamo il saldo usando l'ID trovato
+        balance_url = f"https://api.etoro.com/v1/accounts/{internal_id}/balance"
+        bal_res = requests.get(balance_url, headers=headers, timeout=10)
         
-        if balance_res.status_code == 200:
-            return {"balance": balance_res.json().get('balance'), "id": real_id}
+        if bal_res.status_code == 200:
+            return {
+                "balance": bal_res.json().get('balance'),
+                "id": internal_id,
+                "user": user_info.get('username', 'Edoardo')
+            }
         else:
-            return f"Errore Saldo: {balance_res.status_code}"
+            return f"Errore Saldo: {bal_res.status_code}"
             
     except Exception as e:
         return f"Errore Connessione: {str(e)}"
 
-# --- LOGICA NEWS ---
-def get_signals():
-    url = f"https://newsapi.org/v2/top-headlines?category=business&apiKey={NEWS_KEY}&language=en"
+# --- ANALISI NEWS DINAMICA ---
+def get_market_signals():
+    if not NEWS_TOKEN:
+        return [], []
+    
+    url = f"https://newsapi.org/v2/top-headlines?category=business&apiKey={NEWS_TOKEN}&language=en"
     try:
         r = requests.get(url).json()
         articles = r.get('articles', [])
-        watchlist = ["Gold", "Bitcoin", "NVIDIA", "Tesla", "Oil"]
+        
+        # Asset da monitorare
+        watchlist = ["Gold", "Bitcoin", "NVIDIA", "Tesla", "Oil", "Apple"]
         signals = []
+        
         for asset in watchlist:
             relevant = [a for a in articles if asset.lower() in (a['title'] or "").lower()]
             if relevant:
                 score = sum([analyzer.polarity_scores(a['title'])['compound'] for a in relevant]) / len(relevant)
                 signals.append({"asset": asset, "score": score, "news": relevant[0]['title']})
-        return signals, articles
-    except: return [], []
+        
+        return sorted(signals, key=lambda x: x['score'], reverse=True), articles
+    except:
+        return [], []
 
-# --- INTERFACCIA ---
+# --- INTERFACCIA DASHBOARD ---
 st.title(f"🚀 TERMINALE LIVE - {datetime.now().strftime('%H:%M:%S')}")
-c1, c2, c3 = st.columns([1, 1.2, 1])
 
-with c1:
-    st.header("💰 Asset eToro")
-    res = get_etoro_data()
-    if isinstance(res, str):
-        st.error(f"Dati non ricevuti: {res}")
-        st.info("💡 Il bot sta cercando di estrarre il tuo ID numerico dal Token...")
+col_left, col_mid, col_right = st.columns([1, 1.2, 1])
+
+# COLONNA 1: ASSET REALI (API ETORO)
+with col_left:
+    st.header("💰 Portafoglio eToro")
+    result = fetch_live_etoro()
+    
+    if result == "CHIAVE_MANCANTE":
+        st.error("Inserisci 'ETORO_API_KEY' nei Secrets di Streamlit.")
+    elif isinstance(result, str):
+        st.error(f"⚠️ {result}")
+        st.info("Il bot sta tentando l'accesso IRL...")
     else:
-        st.metric("Saldo Reale (API)", f"${res['balance']}")
-        st.caption(f"ID Account Rilevato: {res['id']}")
-        st.success("Connessione IRL Stabilita!")
+        st.metric("Saldo Reale (USD)", f"${result['balance']}")
+        st.caption(f"Account: {result['user']} | ID: {result['id']}")
+        st.success("Connessione IRL: ATTIVA")
 
-with c2:
+# COLONNA 2: SEGNALI AI (DINAMICI)
+with col_mid:
     st.header("🎯 Papabili Acquisto")
-    signals, news = get_signals()
+    signals, raw_news = get_market_signals()
+    
+    if not signals:
+        st.write("Scansione mercati in corso...")
+    
     for s in signals:
-        if s['score'] > 0.15: st.success(f"**BUY {s['asset']}** ({s['score']:.2f})")
-        elif s['score'] < -0.15: st.error(f"**SELL {s['asset']}** ({s['score']:.2f})")
-        else: st.warning(f"**WAIT {s['asset']}** ({s['score']:.2f})")
+        with st.container():
+            if s['score'] > 0.15:
+                st.success(f"**BUY {s['asset']}** (Sent: {s['score']:.2f})")
+            elif s['score'] < -0.15:
+                st.error(f"**SELL {s['asset']}** (Sent: {s['score']:.2f})")
+            else:
+                st.warning(f"**WAIT {s['asset']}** (Sent: {s['score']:.2f})")
+            st.caption(f"News: {s['news'][:70]}...")
+            st.divider()
 
-with c3:
+# COLONNA 3: NEWS REALI
+with col_right:
     st.header("📰 News Feed")
-    for n in news[:10]:
-        st.write(f"**{n['source']['name']}**: [{n['title']}]({n['url']})")
-        st.divider()
+    if raw_news:
+        for n in raw_news[:10]:
+            st.markdown(f"**{n['source']['name']}**")
+            st.write(f"[{n['title']}]({n['url']})")
+            st.divider()
