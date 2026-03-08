@@ -2,9 +2,9 @@ import streamlit as st
 import requests
 import time
 
-st.set_page_config(page_title="AI Financial Terminal PRO", layout="wide")
+st.set_page_config(page_title="AI Terminal - Full Scan", layout="wide")
 
-# --- CONFIGURAZIONE PONTE ---
+# Link fisso fornito
 GOOGLE_BRIDGE_URL = "https://script.google.com/macros/s/AKfycbxO6mmU9uVUqTKtlmR9cIhJRB7B8jn9dPXwXnvRWVV4xPB2a_jAB0y9r_j61Nji1xTXHQ/exec"
 
 def recupera_tutto():
@@ -16,72 +16,65 @@ def recupera_tutto():
     except:
         return [], "Errore Bridge"
 
-# --- INTERFACCIA ---
-st.title("🚀 AI Financial Terminal: Operativo")
-st.caption(f"Status Live | Analisi Portafoglio Reale | {time.strftime('%H:%M:%S')}")
+st.title("🚀 AI Terminal: Deep Scan")
+st.caption(f"Status Live | Scansione Totale Asset | {time.strftime('%H:%M:%S')}")
 
-col_port, col_ai, col_chart = st.columns([1.2, 1, 1.2])
+col_port, col_ai, col_chart = st.columns([1.3, 1, 1.2])
 
 with col_port:
-    st.subheader("💰 Portafoglio & Performance")
-    data, status = recupera_tutto()
+    st.subheader("💰 Portafoglio Reale")
+    raw_data, status = recupera_tutto()
     
     if status == 200:
-        # Recupero Liquidità
-        for w in data:
-            attr = w.get('attributes', {})
-            if attr.get('symbol') == 'EUR':
-                st.metric("Liquidità Euro", f"{float(attr.get('balance', 0)):.2f} €")
+        st.success(f"✅ Ricevuti {len(raw_data)} pacchetti dati")
         
-        st.divider()
-        st.write("### Azioni & Crypto")
-        
-        found = False
-        for w in data:
-            attr = w.get('attributes', {})
-            qty = float(attr.get('balance', 0))
-            symbol = attr.get('symbol')
+        found_any = False
+        for item in raw_data:
+            attr = item.get('attributes', {})
+            # Recuperiamo tutti i possibili nomi del saldo (Bitpanda cambia tra Fiat e Asset)
+            balance = float(attr.get('balance', 0) or attr.get('amount', 0))
+            symbol = attr.get('symbol', '???')
+            name = attr.get('name', symbol)
             
-            if qty > 0 and symbol != 'EUR':
-                found = True
-                # Bitpanda v1 fornisce average_price. Se manca, usiamo un placeholder.
-                avg_price = float(attr.get('average_price', 0))
+            # Se c'è un saldo positivo, lo mostriamo
+            if balance > 0:
+                found_any = True
+                avg_price = float(attr.get('average_price', 0) or 0)
                 
-                # Mappatura per mostrare i nomi reali che vedo nei tuoi screen
-                names = {"LDO": "Leonardo", "ISP": "Intesa Sanpaolo", "AMZN": "Amazon", "NVDA": "NVIDIA", "AAPL": "Apple"}
-                display_name = names.get(symbol, symbol)
-                
-                # Calcolo P&L (Simulato sui valori di mercato correnti se average_price > 0)
-                # NOTA: Per un calcolo perfetto serve il prezzo live, qui usiamo la logica Delta
-                if avg_price > 0:
-                    # Simuliamo il valore totale basandoci sulla quantità
-                    # In Bitpanda v1 average_price è il costo medio di acquisto
-                    valore_investito = qty * avg_price
-                    st.write(f"**{display_name}** ({symbol})")
-                    st.metric(label="Quantità", value=f"{qty:.4f}", delta=f"Pmc: {avg_price:.2f}€")
-                else:
-                    st.metric(label=display_name, value=f"{qty:.4f}", delta="Dati P&L in caricamento...")
-                st.divider()
+                with st.container():
+                    c1, c2 = st.columns([2, 1])
+                    if symbol == 'EUR':
+                        c1.metric("EURO CASH", f"{balance:.2f} €")
+                    else:
+                        # Calcolo guadagno/perdita basato sul prezzo di carico (Pmc)
+                        # Se Bitpanda non ci dà il prezzo live, mostriamo il Pmc e la quantità
+                        c1.write(f"**{name}** ({symbol})")
+                        c2.metric("Quantità", f"{balance:.4f}")
+                        if avg_price > 0:
+                            st.caption(f"Prezzo Medio Carico: {avg_price:.2f} €")
+                    st.divider()
         
-        if not found:
-            st.warning("⚠️ Se vedi questo, Bitpanda non sta inviando le azioni 'Legacy'. Verifica i permessi API 'Asset-Wallet'.")
+        if not found_any:
+            st.warning("⚠️ Bitpanda non restituisce asset con saldo > 0.")
+            with st.expander("Vedi Dati Raw (Debug)"):
+                st.write(raw_data) # Questo ci dice cosa sta effettivamente arrivando
     else:
-        st.error(f"Errore: {status}")
+        st.error(f"Errore Bridge: {status}")
 
 with col_ai:
-    st.subheader("🎯 Segnali AI Top 10")
-    for a in ["Leonardo", "Intesa SP", "Amazon", "NVIDIA", "Apple"]:
+    st.subheader("🎯 Segnali AI")
+    for a in ["Leonardo", "Intesa SP", "Amazon", "NVIDIA"]:
         with st.expander(f"Analisi {a}"):
-            st.write("Target Price: +12% | Sentiment: Buy")
-            st.button(f"Trade {a}", key=a)
+            st.write("Sentiment: Bullish")
+            st.button("Trade", key=a)
 
 with col_chart:
-    st.subheader("📊 Analisi Leonardo (MIL)")
+    st.subheader("📊 Grafico Leonardo")
     st.components.v1.html("""
         <div style="height:450px;">
         <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
         <script type="text/javascript">
-        new TradingView.widget({"autosize": true, "symbol": "MIL:LDO", "interval": "D", "theme": "dark", "style": "1", "locale": "it"});
+        new TradingView.widget({"autosize":true,"symbol":"MIL:LDO","interval":"D","theme":"dark","style":"1","locale":"it"});
         </script>
         </div>
     """, height=460)
