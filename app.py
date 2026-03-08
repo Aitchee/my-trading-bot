@@ -9,7 +9,7 @@ st_autorefresh(interval=10000, key="datarefresh")
 st.set_page_config(page_title="EDOARDO PRO-TRADER", layout="wide")
 
 # --- CREDENZIALI ---
-BITPANDA_KEY = st.secrets.get("BITPANDA_API_KEY", "").strip()
+BITPANDA_KEY = st.secrets.get("BITPANDA_API_KEY", "5d54c4f3e64db9af79be657b80036696f435feecc9f45c9422fd98964336c821158daf5123376f5175f6a7b8b27dc070126d647ef6c2518946eacaa06ca84ad1").strip()
 NEWS_KEY = st.secrets.get("NEWS_API_KEY", "f47b85db22664beba249feed052403c3")
 
 analyzer = SentimentIntensityAnalyzer()
@@ -107,3 +107,4 @@ with col_n:
     for n in news[:8]:
         st.write(f"**{n['source']['name']}**: {n['title']}")
         st.divider()
+
