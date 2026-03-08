@@ -2,70 +2,81 @@ import streamlit as st
 import requests
 import time
 
+# --- CONFIGURAZIONE ---
 st.set_page_config(page_title="AI Terminal PRO", layout="wide")
 
-# Recupero Chiave Pulita
+# Recupero Chiave con pulizia estrema
 try:
     BP_KEY = str(st.secrets["BITPANDA_API_KEY"]).strip().replace('"', '').replace("'", "")
-    NW_KEY = str(st.secrets["NEWS_API_KEY"]).strip()
-except:
-    st.error("Configura i Secrets!")
+except Exception:
+    st.error("Configura BITPANDA_API_KEY nei Secrets")
     st.stop()
 
-# Funzione con Header di sicurezza avanzato
-def get_bitpanda_data(endpoint):
+# --- FUNZIONE API PROTETTA ---
+def get_bp_data(endpoint):
     url = f"https://api.bitpanda.com/v1/{endpoint}"
     headers = {
         "X-API-KEY": BP_KEY,
         "Accept": "application/json",
-        "User-Agent": "Mozilla/5.0" # Fondamentale per far accettare la chiave confermata
+        "User-Agent": "Mozilla/5.0"
     }
     try:
         r = requests.get(url, headers=headers, timeout=10)
         if r.status_code == 200:
-            return r.json().get('data', []), 200
+            data = r.json().get('data', [])
+            # Verifichiamo che data sia effettivamente una lista per evitare il TypeError
+            return data if isinstance(data, list) else [], 200
         return [], r.status_code
     except:
         return [], "Timeout"
 
-# --- INTERFACCIA ---
+# --- LAYOUT DASHBOARD ---
 st.title("🚀 AI Financial Command Center")
-st.caption(f"Status: Live | {time.strftime('%H:%M:%S')}")
+st.caption(f"Status Live | {time.strftime('%H:%M:%S')}")
 
-col_port, col_ai, col_chart = st.columns([1, 1.2, 1.2])
+col_sx, col_cx, col_dx = st.columns([1, 1.2, 1.2])
 
-with col_port:
+with col_sx:
     st.subheader("💰 Portafoglio")
-    # Fiat Wallets (Saldo Euro)
-    fiat, status = get_bitpanda_data("fiat-wallets")
+    fiat, status = get_bp_data("fiat-wallets")
     
     if status == 200:
-        st.success("✅ Connessione Riuscita!")
+        st.success("✅ Connesso a Bitpanda")
         for w in fiat:
-            if w['attributes']['symbol'] == 'EUR':
-                st.metric("Saldo Euro", f"{float(w['attributes']['balance']):.2f} €")
+            if w.get('attributes', {}).get('symbol') == 'EUR':
+                bal = w['attributes']['balance']
+                st.metric("Saldo Euro", f"{float(bal):.2f} €")
     else:
         st.error(f"Bitpanda Status: {status}")
-        if status == 401:
-            st.info("⚠️ Se la chiave è confermata, prova a fare un 'Reboot' dell'app da Streamlit Cloud.")
+        st.info("Se la chiave è confermata ma vedi 401, Bitpanda sta rifiutando la connessione dal server Cloud.")
 
     st.divider()
     st.subheader("💼 Asset Reali")
-    assets, _ = get_bitpanda_data("asset-wallets")
-    for a in assets:
-        bal = float(a['attributes']['balance'])
-        if bal > 0.0001:
-            st.write(f"**{a['attributes']['cryptocoin_symbol']}**: {bal:.4f}")
+    # Protezione anti-crash: eseguiamo solo se lo status è OK
+    if status == 200:
+        assets, _ = get_bitpanda_data("asset-wallets")
+        found = False
+        for a in assets:
+            # Controllo di sicurezza sulla struttura dei dati
+            if isinstance(a, dict) and 'attributes' in a:
+                bal = float(a['attributes']['balance'])
+                if bal > 0.0001:
+                    st.write(f"**{a['attributes']['cryptocoin_symbol']}**: {bal:.4f}")
+                    found = True
+        if not found: st.write("Nessun asset rilevato.")
+    else:
+        st.warning("Dati asset non disponibili (Errore API)")
 
-with col_ai:
-    st.subheader("🎯 Top 10 Segnali AI")
-    for m in ["Bitcoin", "NVIDIA", "Tesla", "Apple", "Ferrari", "Amazon", "Google", "Meta", "Eni", "Enel"]:
+with col_cx:
+    st.subheader("🎯 Segnali AI Top 10")
+    for m in ["Bitcoin", "NVIDIA", "Tesla", "Apple", "Ferrari", "Amazon", "Microsoft", "Meta", "Eni", "Enel"]:
         with st.expander(f"Analisi {m}"):
-            st.write("Analisi News in corso...")
-            st.button("Trade", key=f"t_{m}")
+            st.write("Sentiment Analysis: In attesa di dati...")
+            st.button("Trade", key=f"btn_{m}")
 
-with col_chart:
+with col_dx:
     st.subheader("📊 Analisi Tecnica Leonardo")
+    # Grafico fisso su Borsa Italiana
     st.components.v1.html("""
         <div style="height:400px;">
         <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
@@ -75,5 +86,6 @@ with col_chart:
         </div>
     """, height=420)
 
+# Auto-refresh ogni 60 secondi
 time.sleep(60)
 st.rerun()
