@@ -11,7 +11,7 @@ st.set_page_config(page_title="EDOARDO AI BOT", layout="wide")
 
 # --- CONFIGURAZIONE BITPANDA & NEWS ---
 # Incolla la tua API KEY di Bitpanda nei Secrets (Profilo -> API)
-BITPANDA_KEY = st.secrets.get("BITPANDA_API_KEY", "IL_TUO_API_KEY_BITPANDA")
+BITPANDA_KEY = st.secrets.get("BITPANDA_API_KEY", "5d54c4f3e64db9af79be657b80036696f435feecc9f45c9422fd98964336c821158daf5123376f5175f6a7b8b27dc070126d647ef6c2518946eacaa06ca84ad1")
 NEWS_KEY = st.secrets.get("NEWS_API_KEY", "f47b85db22664beba249feed052403c3")
 
 analyzer = SentimentIntensityAnalyzer()
@@ -77,3 +77,4 @@ with col_news:
     for n in news[:8]:
         st.write(f"**{n['source']['name']}**: [{n['title']}]({n['url']})")
         st.divider()
+
