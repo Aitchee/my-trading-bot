@@ -11,7 +11,7 @@ st.set_page_config(
 
 # --- 2. CONFIGURAZIONE PONTE GOOGLE ---
 # Incolla qui l'URL della distribuzione (che finisce con /exec)
-GOOGLE_BRIDGE_URL = "https://script.google.com/macros/s/AKfycbweiWAQdmmCq8Rses-bFxogXiCfNdLMC5eu9I1L48Ji00wOj2533IhJqYVM2gkmGygjAg/exec"
+GOOGLE_BRIDGE_URL = "https://script.google.com/macros/s/AKfycbxO6mmU9uVUqTKtlmR9cIhJRB7B8jn9dPXwXnvRWVV4xPB2a_jAB0y9r_j61Nji1xTXHQ/exec"
 
 # --- 3. FUNZIONE RECUPERO DATI ---
 def recupera_dati_ponte():
@@ -130,3 +130,4 @@ st.sidebar.caption("4. Incolla l'URL /exec nel codice")
 # Refresh della pagina ogni 60 secondi
 time.sleep(60)
 st.rerun()
+
