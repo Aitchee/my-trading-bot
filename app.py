@@ -1,91 +1,63 @@
 import streamlit as st
+import yfinance as yf
 import pandas as pd
-import plotly.express as px
 from datetime import datetime
+import plotly.express as px
 
-st.set_page_config(page_title="eToro AI Management", layout="wide")
+st.set_page_config(page_title="REAL AI TERMINAL", layout="wide")
 
-# --- DATABASE ASSET REALI (Modifica questi dati con i tuoi veri di eToro) ---
-if 'my_assets' not in st.session_state:
-    st.session_state.my_assets = [
-        {"ticker": "LDO.MI", "nome": "Leonardo", "qty": 15, "investito": 300.50, "valore_attuale": 345.20},
-        {"ticker": "ISP.MI", "nome": "Intesa SP", "qty": 400, "investito": 1200.00, "valore_attuale": 1180.40},
-        {"ticker": "AMZN", "nome": "Amazon", "qty": 2, "investito": 350.00, "valore_attuale": 382.10},
-        {"ticker": "NVDA", "nome": "NVIDIA", "qty": 1, "investito": 750.00, "valore_attuale": 890.00},
-    ]
+# --- CONFIGURAZIONE ASSET REALI (Inserisci i tuoi ticker eToro qui) ---
+# Esempio: LDO.MI (Leonardo), ISP.MI (Intesa), AMZN (Amazon)
+MY_TICKERS = ["LDO.MI", "ISP.MI", "AMZN", "NVDA"]
 
-# --- LAYOUT SUPERIORE: TRIPLA COLONNA ---
-col_monitor, col_news, col_portfolio = st.columns([1, 1.2, 1.3])
+def get_real_data(tickers):
+    data = []
+    for t in tickers:
+        stock = yf.Ticker(t)
+        hist = stock.history(period="1d")
+        if not hist.empty:
+            price = hist['Close'].iloc[-1]
+            change = hist['Close'].iloc[-1] - hist['Open'].iloc[-1]
+            data.append({"Ticker": t, "Prezzo": price, "Change": change})
+    return pd.DataFrame(data)
 
-# 1. SINISTRA: Monitoraggio e Analisi (Cosa fare ora)
-with col_monitor:
-    st.subheader("🎯 Stock Monitor")
-    for asset in st.session_state.my_assets:
-        pnl = asset['valore_attuale'] - asset['investito']
-        colore = "green" if pnl >= 0 else "red"
-        st.markdown(f"**{asset['nome']}**")
-        st.caption(f"Trend: {'🚀 Bullish' if pnl > 0 else '📉 Bearish'}")
-        st.button(f"Analisi AI {asset['ticker']}", key=f"btn_{asset['ticker']}")
-        st.divider()
-
-# 2. CENTRO: News & Watchlist (In base ai mercati)
-with col_news:
-    st.subheader("📰 Market Watch (News)")
-    st.info("**NVIDIA**: Attesi utili trimestrali. Volatilità alta.")
-    st.warning("**Leonardo**: Nuovi contratti Difesa UE. Monitorare breakout.")
-    st.error("**Intesa SP**: Taglio tassi BCE potrebbe influire sui margini.")
-    
-    st.write("---")
-    st.write("**Hot Picks del giorno:**")
-    st.success("1. TESLA (Oversold)")
-    st.success("2. APPLE (New Product Launch)")
-
-# 3. DESTRA: Asset Effettivi e P&L Reale
-with col_portfolio:
-    st.subheader("💰 Mio Portafoglio eToro")
-    tot_investito = sum(a['investito'] for a in st.session_state.my_assets)
-    tot_attuale = sum(a['valore_attuale'] for a in st.session_state.my_assets)
-    tot_pnl = tot_attuale - tot_investito
-    
-    st.metric("Valore Totale", f"{tot_attuale:,.2f} €", f"{tot_pnl:,.2f} €")
-    st.write("---")
-    
-    for a in st.session_state.my_assets:
-        pnl_singolo = a['valore_attuale'] - a['investito']
-        perc = (pnl_singolo / a['investito']) * 100
-        
-        c1, c2 = st.columns([2,1])
-        c1.write(f"**{a['nome']}** ({a['qty']} pezzi)")
-        c1.caption(f"Investiti: {a['investito']} €")
-        c2.metric("P&L", f"{a['valore_attuale']}€", f"{perc:.2f}%")
-        st.divider()
-
-# --- LAYOUT INFERIORE: GRAFICI A CASCATA ---
+st.title("🚀 REAL-TIME AI TRADING TERMINAL")
 st.write("---")
-st.header("📊 Performance & Charts")
 
-# A. Grafico a Linea del Portafoglio nel tempo (Simulato)
-st.subheader("📈 Andamento Equity Line")
-# Creiamo dati storici fake per il grafico a linea
-date_rng = pd.date_range(start='2024-01-01', periods=10, freq='M')
-df_history = pd.DataFrame({'Data': date_rng, 'Valore (€)': [2000, 2100, 2050, 2300, 2450, 2400, 2600, 2750, 2800, tot_attuale]})
-fig_line = px.line(df_history, x='Data', y='Valore (€)', template="plotly_dark", line_shape="spline")
-st.plotly_chart(fig_line, use_container_width=True)
+col_sx, col_cx, col_dx = st.columns([1, 1.2, 1.3])
 
-# B. Grafici Asset Specifici (TradingView)
-st.subheader("📉 Analisi Grafica Asset in Portafoglio")
-asset_selezionato = st.selectbox("Cambia asset visualizzato sotto:", [a['ticker'] for a in st.session_state.my_assets])
+# 1. SINISTRA: MONITORAGGIO MERCATI REALI (yFinance)
+with col_sx:
+    st.subheader("📈 Mercati Live")
+    df_market = get_real_data(MY_TICKERS)
+    for index, row in df_market.iterrows():
+        st.metric(row['Ticker'], f"{row['Prezzo']:.2f} €", f"{row['Change']:.2f}")
 
-chart_html = f"""
-    <div style="height:500px;">
-        <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
-        <script type="text/javascript">
-        new TradingView.widget({{
-          "autosize": true, "symbol": "{asset_selezionato}", "interval": "D",
-          "theme": "dark", "style": "1", "locale": "it", "enable_publishing": false, 
-          "allow_symbol_change": true, "container_id": "tv_chart_main"
-        }});
-        </script>
-    </div>
-"""
-st.components.v1.html(chart_html, height=520)
+# 2. CENTRO: NEWS VERE (RSS Feed)
+with col_cx:
+    st.subheader("📰 News Vere (Borsa)")
+    # Usiamo un trucco per mostrare news reali senza API Key complicate
+    for t in MY_TICKERS:
+        st.write(f"**Ultim'ora {t}:**")
+        st.caption(f"Verifica news su: [Finanza Online](https://www.finanzaonline.com/ricerca?q={t})")
+    # Nota: Qui integreremo una libreria di scraping per titoli specifici
+
+# 3. DESTRA: IL TUO PORTAFOGLIO (Manuale/Google Sheet)
+with col_dx:
+    st.subheader("💰 Portafoglio eToro Reale")
+    st.warning("Per leggere i tuoi dati eToro, dobbiamo collegare un Google Sheet.")
+    st.info("eToro non permette l'accesso API diretto ai privati.")
+    
+    # Esempio di calcolo reale se inserisci i tuoi dati
+    pmc_esempio = st.number_input("Inserisci il tuo prezzo di carico Leonardo:", value=21.0)
+    prezzo_attuale = df_market[df_market['Ticker'] == "LDO.MI"]['Prezzo'].values[0]
+    st.write(f"**Leonardo (LDO.MI)**")
+    st.metric("P&L Attuale", f"{prezzo_attuale:.2f} €", f"{(prezzo_attuale-pmc_esempio):.2f} €")
+
+# --- GRAFICI REALI ---
+st.write("---")
+ticker_chart = st.selectbox("Seleziona grafico reale:", MY_TICKERS)
+df_chart = yf.download(ticker_chart, period="1mo", interval="1d")
+if not df_chart.empty:
+    fig = px.line(df_chart, y="Close", title=f"Andamento Reale 30gg: {ticker_chart}", template="plotly_dark")
+    st.plotly_chart(fig, use_container_width=True)
