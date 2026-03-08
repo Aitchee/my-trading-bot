@@ -4,7 +4,7 @@ from dotenv import load_dotenv
 
 # Carica le credenziali dal file .env
 load_dotenv()
-API_KEY = os.getenv("ETORO_API_KEY")
+API_KEY = os.getenv("eyJjaSI6IjYwY2FiYjBiLTU1OTctNDQ4NS04ZjYzLTdlOWUwNTZlMGJiOCIsImVhbiI6IlVucmVnaXN0ZXJlZEFwcGxpY2F0aW9uIiwiZWsiOiJyNEU1OEc0QmJXV2xvYmtQTFZUd3ZFN0UxamE1aVJvNC1uRjVsNUVKdWhGdTZCeFNObGdSbERsLlpsN01ic0tPcWJZdUR4emk1dEFNdDhNUHFGRWU5TVVJR3E3LmpGTkVKNnVjdXZra2U0NF8ifQ__")
 ACCOUNT_ID = os.getenv("ETORO_ACCOUNT_ID")
 
 # URL base dell'API eToro (assicurati di usare l'endpoint corretto fornito nella loro doc)
