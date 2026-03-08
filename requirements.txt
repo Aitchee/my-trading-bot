@@ -3,4 +3,3 @@ requests
 pandas
 vaderSentiment
 streamlit-autorefresh
-python-dotenv
