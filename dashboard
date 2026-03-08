@@ -1,0 +1,17 @@
+import streamlit as st
+import pandas as pd
+
+st.title("🤖 Il Mio Trading Bot")
+
+col1, col2 = st.columns(2)
+col1.metric("Saldo eToro", "1.500 €", "+2.5%")
+col2.metric("Saldo Bitpanda", "850 €", "-1.2%")
+
+st.subheader("Ultime Operazioni")
+# Qui simuleremo i dati che arrivano dalle API
+data = {
+    'Asset': ['BTC', 'AAPL', 'ETH'],
+    'Azione': ['BUY', 'BUY', 'SELL'],
+    'Motivazione': ['Notizie Positive USA', 'Trimestrale Ottima', 'Sentiment Crypto Basso']
+}
+st.table(pd.DataFrame(data))
