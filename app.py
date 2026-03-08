@@ -2,23 +2,19 @@ import streamlit as st
 import requests
 import time
 
-# --- CONFIGURAZIONE ---
-st.set_page_config(page_title="Trading Bot Debug", layout="wide")
+st.set_page_config(page_title="Debug Bitpanda V2", layout="wide")
 
-# RECUPERO CHIAVI (Senza manipolazioni, le prendiamo come sono)
-try:
-    BP_KEY = st.secrets["BITPANDA_API_KEY"]
-except:
-    st.error("Chiave BITPANDA_API_KEY non trovata nei Secrets!")
-    st.stop()
+# Recupero chiave
+BP_KEY = st.secrets.get("BITPANDA_API_KEY", "").strip()
 
-# --- FUNZIONE DI TEST (DIRETTISSIMA) ---
-def test_connessione():
-    # Proviamo l'endpoint bilancio globale, più stabile del fiat-wallets
-    url = "https://api.bitpanda.com/v1/balances"
+def test_v2():
+    # Proviamo l'endpoint della v2 che a volte scavalca i blocchi della v1
+    url = "https://api.bitpanda.com/v2/balances"
     headers = {
-        "X-API-KEY": BP_KEY,
-        "Accept": "application/json" # Fondamentale per Bitpanda
+        "X-Api-Key": BP_KEY,
+        "Accept": "application/json",
+        "Content-Type": "application/json",
+        "User-Agent": "Mozilla/5.0" # Simula un accesso umano
     }
     try:
         r = requests.get(url, headers=headers, timeout=10)
@@ -26,45 +22,37 @@ def test_connessione():
     except Exception as e:
         return str(e), "Errore"
 
-st.title("🤖 Debug Connessione Bitpanda")
+st.title("🤖 Test Connessione V2")
 
-# --- ESECUZIONE TEST ---
-dati, status = test_connessione()
+dati, status = test_v2()
 
-col1, col2 = st.columns(2)
+if status == 200:
+    st.success("✅ CLAMOROSO: Connesso con V2!")
+    st.json(dati)
+elif status == 401:
+    st.error("❌ Ancora 401: Accesso Negato")
+    st.write("Dettaglio errore:", dati)
+    
+    st.divider()
+    st.warning("⚠️ **Diagnosi Finale:**")
+    st.write("""
+    Se anche questo fallisce, il problema non è il codice, ma una di queste due cose nelle impostazioni di Bitpanda:
+    1. **E-mail di conferma:** Controlla la tua mail. Bitpanda spesso invia una mail per 'autorizzare l'uso della chiave API' dopo che l'hai creata. Finché non clicchi, la chiave dà 401.
+    2. **Restrizioni geografiche/IP:** Streamlit usa server americani o europei random. Se Bitpanda vede un accesso sospetto da un server cloud, lo sega istantaneamente.
+    """)
+else:
+    st.info(f"Status: {status}")
 
-with col1:
-    st.subheader("Stato API")
-    if status == 200:
-        st.success(f"✅ CONNESSO! (Codice {status})")
-        st.write("Il bot ora riesce a leggere i tuoi dati.")
-    elif status == 401:
-        st.error(f"❌ ERRORE 401: Accesso Negato")
-        st.write("Bitpanda non riconosce questa chiave. Controlla che non sia scaduta.")
-    else:
-        st.warning(f"⚠️ Status: {status}")
-        st.write(dati)
-
-with col2:
-    st.subheader("Grafico di Controllo (Leonardo)")
-    # Se il grafico non appare qui, il problema è il simbolo di TradingView
-    st.components.v1.html("""
-        <div style="height:350px;">
-        <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
-        <script type="text/javascript">
-        new TradingView.widget({
-          "autosize": true, "symbol": "MIL:LDO", "interval": "D",
-          "theme": "dark", "style": "1", "locale": "it", "timezone": "Etc/UTC"
-        });
-        </script>
-        </div>
-    """, height=360)
-
-# Visualizzazione dei dati grezzi per capire cosa arriva
-st.divider()
-st.subheader("Dati Grezzi ricevuti dall'API:")
-st.json(dati)
-
-# Refresh ogni 30s per il debug
-time.sleep(30)
-st.rerun()
+# Il grafico deve funzionare a prescindere dall'API
+st.subheader("📊 Analisi Tecnica Leonardo (Sempre Attivo)")
+st.components.v1.html("""
+    <div style="height:400px;">
+    <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
+    <script type="text/javascript">
+    new TradingView.widget({
+      "autosize": true, "symbol": "MIL:LDO", "interval": "D",
+      "theme": "dark", "style": "1", "locale": "it"
+    });
+    </script>
+    </div>
+""", height=420)
