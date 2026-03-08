@@ -6,7 +6,7 @@ import time
 st.set_page_config(page_title="AI Terminal PRO", layout="wide")
 
 # 2. INCOLLA QUI IL TUO URL DI GOOGLE SCRIPT
-GOOGLE_BRIDGE_URL = "https://script.google.com/macros/s/AKfycbweiWAQdmmCq8Rses-bFxogXiCfNdLMC5eu9I1L48Ji00wOj2533IhJqYVM2gkmGygjAg/exec"
+GOOGLE_BRIDGE_URL = "https://script.google.com/macros/s/AKfycbz6HGMzzuh_eUEg8rAS8TFmgD7d1eTpcdneFfVNkbQ4FfBIMYrnseyNm-3hkxSdvz-2oA/exec"
 
 # 3. Funzione di recupero dati tramite il "Ponte"
 def recupera_dati_ponte():
@@ -61,4 +61,5 @@ with col_dx:
 # Refresh automatico ogni minuto
 time.sleep(60)
 st.rerun()
+
 
