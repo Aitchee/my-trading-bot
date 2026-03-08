@@ -1,12 +1,12 @@
 import streamlit as st
 import requests
 
-st.set_page_config(page_title="Terminal Operativo", layout="wide")
+st.set_page_config(page_title="AI Terminal PRO", layout="wide")
 
-# URL del tuo deployment di Google Script
-BRIDGE_URL = "https://script.google.com/macros/s/AKfycbxO6mmU9uVUqTKtlmR9cIhJRB7B8jn9dPXwXnvRWVV4xPB2a_jAB0y9r_j61Nji1xTXHQ/exec"
+# Link del tuo ponte Google (deve terminare con /exec)
+BRIDGE_URL = "https://script.google.com/macros/s/AKfycbygLJWSdT0GSTw8qm_1uLOJswsB8J2EHjZ7SjZGpqesnKiTuCW_hx8CZKQF8Z-KkntsjQ/exec"
 
-st.header("💰 Saldi Real-Time Bitpanda")
+st.header("💰 Portafoglio Reale Bitpanda")
 
 if st.button("🔄 SINCRONIZZA ORA"):
     try:
@@ -15,17 +15,17 @@ if st.button("🔄 SINCRONIZZA ORA"):
         assets = res.get('data', [])
         
         if not assets:
-            st.error("Il ponte è attivo ma Bitpanda non invia asset. Controlla i permessi della chiave API.")
+            st.warning("⚠️ Connessione OK, ma Bitpanda restituisce 0 asset. Verifica i permessi 'Trading' della chiave.")
             st.json(res)
         else:
             for a in assets:
                 attr = a.get('attributes', {})
-                # Legge balance per fiat e amount per asset
+                # Legge balance per contanti e amount per titoli/crypto
                 val = float(attr.get('balance', 0) or attr.get('amount', 0) or 0)
                 if val > 0:
-                    symbol = attr.get('symbol', 'N/D')
+                    symbol = attr.get('symbol', 'N/A')
                     name = attr.get('name', symbol)
-                    st.write(f"🏷️ **{name}** ({symbol}): **{val:.4f}**")
+                    st.metric(label=f"{name} ({symbol})", value=f"{val:.4f}")
                     st.divider()
     except Exception as e:
-        st.error(f"Errore di connessione: {e}")
+        st.error(f"Errore: {e}")
