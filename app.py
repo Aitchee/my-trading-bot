@@ -5,46 +5,47 @@ from datetime import datetime
 from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
 from streamlit_autorefresh import st_autorefresh
 
-# Refresh 10 secondi per dati Live
+# Refresh 10 secondi
 st_autorefresh(interval=10000, key="datarefresh")
-st.set_page_config(page_title="EDOARDO REAL-TIME TERMINAL", layout="wide")
+st.set_page_config(page_title="EDOARDO LIVE TERMINAL", layout="wide")
 
-# Recupero Segreti puliti
+# Recupero Segreti
 CID = st.secrets.get("ETORO_ACCOUNT_ID", "").strip()
 TOKEN = st.secrets.get("ETORO_API_KEY", "").strip()
 NEWS_KEY = st.secrets.get("NEWS_API_KEY", "").strip()
 
 analyzer = SentimentIntensityAnalyzer()
 
-def fetch_etoro_portfolio():
+def fetch_etoro_data():
     if not TOKEN or not CID:
         return "CONFIG_MISSING"
 
-    # Headers ufficiali estratti dal tuo JSON
     headers = {
         "Authorization": f"Bearer {TOKEN}",
         "Content-Type": "application/json",
         "X-Accept-Version": "v1"
     }
     
-    # Usiamo l'endpoint specifico per il Portfolio che abbiamo visto nel tuo JSON
-    url = f"https://api.etoro.com/v1/portfolio/{CID}/positions"
+    # Lista di possibili percorsi per stanare il 404
+    endpoints = [
+        f"https://api.etoro.com/v1/accounts/{CID}/positions", # Percorso standard
+        f"https://api.etoro.com/v1/portfolio/{CID}/summary",   # Percorso portfolio
+        "https://api.etoro.com/v1/metadata/users/me"           # Percorso auto-discovery
+    ]
     
-    try:
-        response = requests.get(url, headers=headers, timeout=12)
-        
-        if response.status_code == 200:
-            return response.json()
-        elif response.status_code == 401:
-            return "TOKEN_EXPIRED"
-        elif response.status_code == 404:
-            return "ID_NOT_FOUND"
-        else:
-            return f"ERRORE_{response.status_code}"
-    except Exception as e:
-        return f"CONNESSIONE_FALLITA: {str(e)}"
+    for url in endpoints:
+        try:
+            r = requests.get(url, headers=headers, timeout=10)
+            if r.status_code == 200:
+                return {"data": r.json(), "url_used": url.split('/')[-1]}
+            elif r.status_code == 401:
+                return "TOKEN_EXPIRED"
+        except:
+            continue
+            
+    return "NOT_FOUND_404"
 
-def get_market_signals():
+def get_market_intelligence():
     url = f"https://newsapi.org/v2/top-headlines?category=business&apiKey={NEWS_KEY}&language=en"
     try:
         r = requests.get(url).json()
@@ -61,41 +62,41 @@ def get_market_signals():
         return [], []
 
 # --- INTERFACCIA ---
-st.title(f"🚀 EDOARDO TERMINAL LIVE - {datetime.now().strftime('%H:%M:%S')}")
+st.title(f"🚀 TERMINALE LIVE - {datetime.now().strftime('%H:%M:%S')}")
 
 c1, c2, c3 = st.columns([1, 1.2, 1])
 
 with c1:
-    st.header("💰 Portafoglio Reale")
-    data = fetch_etoro_portfolio()
+    st.header("💰 Portafoglio IRL")
+    res = fetch_etoro_data()
     
-    if isinstance(data, str):
-        if data == "TOKEN_EXPIRED":
-            st.error("❌ Token Scaduto. Prendi un nuovo 'ey...' dalla console di eToro.")
-        elif data == "ID_NOT_FOUND":
-            st.error(f"❌ ID {CID} non trovato. Verifica il numero CID.")
-        else:
-            st.error(f"❌ Errore: {data}")
+    if res == "TOKEN_EXPIRED":
+        st.error("❌ Token Scaduto (401). Rigeneralo.")
+    elif res == "NOT_FOUND_404":
+        st.error(f"❌ ID {CID} respinto (404).")
+        st.info("Suggerimento: eToro potrebbe richiedere il tuo ID globale. Prova a cercare 'gcid' nel JSON e usa quello.")
+    elif isinstance(res, dict):
+        # Se abbiamo successo
+        st.success(f"Connesso via {res['url_used']}!")
+        # Parsing flessibile
+        data = res['data']
+        # Se è un bilancio
+        if 'balance' in data:
+            st.metric("Saldo Reale", f"${data['balance']}")
+        # Se sono posizioni
+        if 'Positions' in data:
+            for p in data['Positions']:
+                st.write(f"📦 Asset ID {p['InstrumentID']}: ${p['Amount']}")
     else:
-        # Parsing delle posizioni reali dal tuo JSON
-        positions = data.get('Positions', [])
-        if not positions:
-            st.info("Nessuna posizione aperta trovata.")
-        for p in positions:
-            # Sappiamo che InstrumentID 18 è GOLD dal tuo JSON
-            asset_name = "GOLD (XAU/USD)" if p['InstrumentID'] == 18 else f"ID {p['InstrumentID']}"
-            st.metric(f"{asset_name}", f"${p['Amount']}", f"Leva: {p['Leverage']}x")
-            st.caption(f"Aperta il: {p['OpenDateTime'][:10]}")
-        st.success(f"Connesso all'ID: {CID}")
+        st.error("Errore generico di connessione.")
 
 with c2:
-    st.header("🎯 Papabili Acquisto")
-    sigs, news = get_market_signals()
+    st.header("🎯 Analisi Papabili")
+    sigs, news = get_market_intelligence()
     for s in sigs:
-        if s['score'] > 0.1: st.success(f"**BUY {s['asset']}** (Sent: {s['score']:.2f})")
-        elif s['score'] < -0.1: st.error(f"**SELL {s['asset']}** (Sent: {s['score']:.2f})")
+        if s['score'] > 0.1: st.success(f"**BUY {s['asset']}**")
+        elif s['score'] < -0.1: st.error(f"**SELL {s['asset']}**")
         else: st.warning(f"**WAIT {s['asset']}**")
-    if not sigs: st.write("Scansione mercati...")
 
 with c3:
     st.header("📰 News Feed")
