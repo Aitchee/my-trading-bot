@@ -1,80 +1,109 @@
 import streamlit as st
 import requests
-import pandas as pd
 from datetime import datetime
 from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
 from streamlit_autorefresh import st_autorefresh
 
-# Refresh automatico 10s
+# Refresh ogni 10 secondi per i prezzi e i segnali
 st_autorefresh(interval=10000, key="datarefresh")
-st.set_page_config(page_title="EDOARDO AI BOT", layout="wide")
+st.set_page_config(page_title="EDOARDO PRO-TRADER", layout="wide")
 
-# --- CONFIGURAZIONE BITPANDA & NEWS ---
-# Incolla la tua API KEY di Bitpanda nei Secrets (Profilo -> API)
-BITPANDA_KEY = st.secrets.get("BITPANDA_API_KEY", "5d54c4f3e64db9af79be657b80036696f435feecc9f45c9422fd98964336c821158daf5123376f5175f6a7b8b27dc070126d647ef6c2518946eacaa06ca84ad1")
+# --- CREDENZIALI ---
+BITPANDA_KEY = st.secrets.get("BITPANDA_API_KEY", "").strip()
 NEWS_KEY = st.secrets.get("NEWS_API_KEY", "f47b85db22664beba249feed052403c3")
 
 analyzer = SentimentIntensityAnalyzer()
+headers = {"X-API-KEY": BITPANDA_KEY}
 
-# --- FUNZIONE BITPANDA (SALDO REALE) ---
-def get_bitpanda_balance():
-    if "IL_TUO_API_KEY" in BITPANDA_KEY: return None
-    headers = {"X-API-KEY": BITPANDA_KEY}
+# --- 1. RECUPERO WALLET REALE ---
+def get_balance():
     url = "https://api.bitpanda.com/v1/asset-wallets"
     try:
-        r = requests.get(url, headers=headers)
-        return r.json()
-    except: return None
+        r = requests.get(url, headers=headers).json()
+        wallets = []
+        # Estraiamo Fiat (Euro) e Asset (Oro/BTC)
+        for w in r.get('data', []):
+            attributes = w.get('attributes', {})
+            if float(attributes.get('balance', 0)) > 0:
+                wallets.append({
+                    "name": attributes.get('name'),
+                    "symbol": attributes.get('symbol'),
+                    "balance": attributes.get('balance')
+                })
+        return wallets
+    except: return []
 
-# --- ANALISI SENTIMENT ---
-def get_trading_signals():
+# --- 2. LOGICA DI ESECUZIONE ORDINE (IL "TRADING") ---
+def execute_trade(asset_code, amount, side="buy"):
+    """
+    ATTENZIONE: Questa funzione invia un ordine REALE a Bitpanda.
+    Asset_code es: 'XAU' (Oro), 'BTC' (Bitcoin)
+    """
+    url = "https://api.bitpanda.com/v1/trades"
+    payload = {
+        "asset_code": asset_code,
+        "amount": amount,
+        "type": side, # 'buy' o 'sell'
+        "currency_code": "EUR"
+    }
+    # Per sicurezza, in questa fase stampiamo solo l'intenzione. 
+    # Per attivare l'acquisto reale, scommenta la riga sotto:
+    # r = requests.post(url, headers=headers, json=payload)
+    return f"SIMULAZIONE: Ordine {side} di {amount}€ su {asset_code} inviato."
+
+# --- 3. ANALISI SENTIMENT NEWS ---
+def get_signals():
     url = f"https://newsapi.org/v2/top-headlines?category=business&apiKey={NEWS_KEY}&language=en"
     try:
         articles = requests.get(url).json().get('articles', [])
-        watchlist = ["Gold", "Bitcoin", "NVIDIA"]
-        results = []
-        for asset in watchlist:
-            rel = [a for a in articles if asset.lower() in (a['title'] or "").lower()]
+        watchlist = {"Gold": "XAU", "Bitcoin": "BTC", "NVIDIA": "NVDA"}
+        found = []
+        for name, code in watchlist.items():
+            rel = [a for a in articles if name.lower() in (a['title'] or "").lower()]
             if rel:
                 score = sum([analyzer.polarity_scores(a['title'])['compound'] for a in rel]) / len(rel)
-                results.append({"name": asset, "score": score, "headline": rel[0]['title']})
-        return results, articles
+                found.append({"name": name, "code": code, "score": score, "news": rel[0]['title']})
+        return found, articles
     except: return [], []
 
-# --- INTERFACCIA ---
-st.title(f"🤖 Bot Edoardo: Trading IRL - {datetime.now().strftime('%H:%M:%S')}")
+# --- INTERFACCIA DASHBOARD ---
+st.title(f"📈 TERMINALE EDOARDO: BITPANDA LIVE")
+st.write(f"Ultimo aggiornamento: {datetime.now().strftime('%H:%M:%S')}")
 
-col_wallet, col_logic, col_news = st.columns([1, 1.2, 1])
+col_w, col_t, col_n = st.columns([1, 1.2, 1])
 
-with col_wallet:
-    st.header("🐼 Portafoglio Bitpanda")
-    bp_data = get_bitpanda_balance()
-    if bp_data:
-        # Qui mostriamo i tuoi veri asset su Bitpanda
-        st.success("Connessione Bitpanda: LIVE")
-        # Logica di parsing del wallet Bitpanda...
+with col_w:
+    st.header("💰 Il Tuo Wallet")
+    my_assets = get_balance()
+    if my_assets:
+        for a in my_assets:
+            st.metric(f"{a['name']} ({a['symbol']})", f"{float(a['balance']):.4f}")
     else:
-        st.error("API Bitpanda non configurata.")
-        st.info("💡 Usa Bitpanda per il trading automatico: eToro non permette l'accesso ai bot.")
+        st.warning("Nessun asset trovato o API limitata.")
 
-with col_logic:
-    st.header("🎯 Logica Decisionale")
-    signals, news = get_trading_signals()
-    for s in signals:
-        st.subheader(f"Analisi {s['name']}")
+with col_t:
+    st.header("🎯 Analisi & Trading")
+    sigs, news = get_signals()
+    for s in sigs:
+        st.subheader(f"Mercato: {s['name']}")
+        # Visualizzazione Segnale
         if s['score'] > 0.15:
-            st.success(f"🚀 SEGNALE: BUY (Sent: {s['score']:.2f})")
-            if st.button(f"Esegui Acquisto {s['name']} su Bitpanda"):
-                st.write(f"Inviando ordine API a Bitpanda...")
+            st.success(f"🚀 BUY SIGNAL ({s['score']:.2f})")
+            # Tasto per eseguire l'operazione
+            if st.button(f"COMPRA {s['name']} (10€)"):
+                msg = execute_trade(s['code'], 10, "buy")
+                st.info(msg)
         elif s['score'] < -0.15:
-            st.error(f"📉 SEGNALE: SELL (Sent: {s['score']:.2f})")
+            st.error(f"📉 SELL SIGNAL ({s['score']:.2f})")
+            if st.button(f"VENDI {s['name']}"):
+                msg = execute_trade(s['code'], 10, "sell")
+                st.info(msg)
         else:
-            st.warning("⚖️ SEGNALE: HOLD / ATTENDI")
-        st.caption(f"News: {s['headline'][:60]}...")
+            st.warning("⚖️ HOLD (Sentiment Neutro)")
+        st.caption(f"Ultima News: {s['news'][:70]}...")
 
-with col_news:
-    st.header("📰 News Feed")
+with col_n:
+    st.header("📰 News Stream")
     for n in news[:8]:
-        st.write(f"**{n['source']['name']}**: [{n['title']}]({n['url']})")
+        st.write(f"**{n['source']['name']}**: {n['title']}")
         st.divider()
-
