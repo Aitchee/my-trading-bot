@@ -7,7 +7,7 @@ st.set_page_config(page_title="AI Trading Terminal PRO", layout="wide")
 
 # --- 2. CONFIGURAZIONE PONTE GOOGLE ---
 # Sostituisci con il tuo URL /exec
-GOOGLE_BRIDGE_URL = "INCOLLA_QUI_IL_TUO_URL_DI_GOOGLE"
+GOOGLE_BRIDGE_URL = "https://script.google.com/macros/s/AKfycbxO6mmU9uVUqTKtlmR9cIhJRB7B8jn9dPXwXnvRWVV4xPB2a_jAB0y9r_j61Nji1xTXHQ/exec"
 
 # --- 3. FUNZIONE DI RECUPERO DATI ---
 def recupera_dati_globali():
@@ -81,3 +81,4 @@ with col_chart:
 # --- 5. REFRESH ---
 time.sleep(60)
 st.rerun()
+
