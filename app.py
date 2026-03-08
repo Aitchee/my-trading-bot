@@ -4,87 +4,99 @@ from datetime import datetime
 from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
 from streamlit_autorefresh import st_autorefresh
 
-# Setup Interfaccia
-st.set_page_config(page_title="EDOARDO PRO-TRADER", layout="wide")
-st_autorefresh(interval=10000, key="terminal_refresh_final")
+# 1. SETUP & REFRESH (10s)
+st.set_page_config(page_title="EDOARDO AI TRADER", layout="wide")
+st_autorefresh(interval=10000, key="auto_trade_refresh_v1")
 
-# Recupero Chiavi Pulite
-RAW_KEY = st.secrets.get("BITPANDA_API_KEY", "ad7c16aa1dce062f454b9c1a58f1972de5d41698d1d119e48aaf63e66b6f402ef3c9a3c7e7e2648211f0b5aa83036a67205df48710b91215b9cd09616c5159b0")
-BITPANDA_KEY = RAW_KEY.strip().replace('"', '').replace("'", "")
+# 2. RECUPERO CHIAVI
+RAW_KEY = st.secrets.get("BITPANDA_API_KEY", "5d54c4f3e64db9af79be657b80036696f435feecc9f45c9422fd98964336c821158daf5123376f5175f6a7b8b27dc070126d647ef6c2518946eacaa06ca84ad1")
+BITPANDA_KEY = "".join(RAW_KEY.split()).replace('"', '').replace("'", "")
 NEWS_KEY = st.secrets.get("NEWS_API_KEY", "f47b85db22664beba249feed052403c3")
 
 analyzer = SentimentIntensityAnalyzer()
-headers = {"X-API-KEY": BITPANDA_KEY, "Accept": "application/json"}
+headers = {
+    "X-API-KEY": BITPANDA_KEY,
+    "Accept": "application/json",
+    "User-Agent": "Mozilla/5.0"
+}
 
-def fetch_all_wallets():
-    if not BITPANDA_KEY: return "CHIAVE_MANCANTE"
-    
-    # Doppio controllo: Asset (Oro/Crypto) e Fiat (Euro)
-    endpoints = {
-        "Assets": "https://api.bitpanda.com/v1/asset-wallets",
-        "Fiat": "https://api.bitpanda.com/v1/fiat-wallets"
+# --- FUNZIONE ESECUZIONE ORDINE REALE ---
+def execute_trade(asset_code, amount_eur):
+    url = "https://api.bitpanda.com/v1/trades"
+    payload = {
+        "asset_code": asset_code,
+        "amount": amount_eur,
+        "type": "buy",
+        "currency_code": "EUR"
     }
-    
-    total_portfolio = []
-    
-    for label, url in endpoints.items():
-        try:
-            r = requests.get(url, headers=headers, timeout=10)
-            if r.status_code == 200:
-                data = r.json().get('data', [])
-                for item in data:
-                    attr = item.get('attributes', {})
-                    balance = float(attr.get('balance', 0))
-                    if balance > 0:
-                        total_portfolio.append({
-                            "name": attr.get('name'),
-                            "symbol": attr.get('symbol'),
-                            "balance": balance,
-                            "type": label
-                        })
-            elif r.status_code == 401:
-                return "ERRORE_401_NON_AUTORIZZATO"
-        except:
-            continue
-            
-    return total_portfolio
+    try:
+        r = requests.post(url, headers=headers, json=payload, timeout=15)
+        if r.status_code == 201 or r.status_code == 200:
+            return f"✅ ORDINE ESEGUITO: {amount_eur}€ su {asset_code}"
+        else:
+            return f"❌ ERRORE ORDINE: {r.status_code} - {r.text[:100]}"
+    except Exception as e:
+        return f"❌ ERRORE RETE: {str(e)}"
+
+# --- FUNZIONE RECUPERO ASSET ---
+def fetch_wallets():
+    url = "https://api.bitpanda.com/v1/asset-wallets"
+    try:
+        r = requests.get(url, headers=headers, timeout=10)
+        if r.status_code == 200:
+            return r.json().get('data', [])
+        return f"Status {r.status_code}"
+    except: return "Error"
 
 # --- DASHBOARD ---
-st.title(f"🚀 TERMINALE EDOARDO LIVE - {datetime.now().strftime('%H:%M:%S')}")
+st.title(f"🤖 TERMINALE EDOARDO LIVE - {datetime.now().strftime('%H:%M:%S')}")
 
-c1, c2, c3 = st.columns([1, 1.2, 1])
+c_wallet, c_trade, c_news = st.columns([1, 1.2, 1])
 
-with c1:
-    st.header("💰 Saldo Reale")
-    portfolio = fetch_all_wallets()
-    
-    if portfolio == "ERRORE_401_NON_AUTORIZZATO":
-        st.error("❌ Chiave Rifiutata. Hai cliccato 'Conferma' nell'email di Bitpanda?")
-    elif isinstance(portfolio, list):
-        if not portfolio:
-            st.info("Connesso. Saldo attuale: 0.00")
-        for a in portfolio:
-            icon = "💶" if a['type'] == "Fiat" else "🪙"
-            st.metric(f"{icon} {a['name']}", f"{a['balance']:.4f} {a['symbol']}")
-        st.success("✅ Connessione Bitpanda: LIVE")
+with c_wallet:
+    st.header("💰 Portafoglio")
+    data = fetch_wallets()
+    if isinstance(data, list):
+        for item in data:
+            attr = item.get('attributes', {})
+            val = float(attr.get('balance', 0))
+            if val > 0:
+                st.metric(f"{attr.get('name')}", f"{val:.4f} {attr.get('symbol')}")
+        st.success("Bitpanda Online")
     else:
-        st.warning("In attesa di dati...")
+        st.error(f"Connessione: {data}")
 
-with c2:
-    st.header("🎯 Segnali Trading")
-    # Logica AI rapida
+with c_trade:
+    st.header("🎯 Trading Logic")
+    # Analisi Sentiment per Gold
     try:
         n_url = f"https://newsapi.org/v2/top-headlines?category=business&apiKey={NEWS_KEY}&language=en"
         articles = requests.get(n_url).json().get('articles', [])
-        for asset in ["Gold", "Bitcoin", "NVIDIA"]:
-            rel = [a for a in articles if asset.lower() in (a['title'] or "").lower()]
-            if rel:
-                score = analyzer.polarity_scores(rel[0]['title'])['compound']
-                if score > 0.15: st.success(f"🚀 BUY {asset} ({score:.2f})")
-                elif score < -0.15: st.error(f"📉 SELL {asset} ({score:.2f})")
-                else: st.warning(f"⚖️ WAIT {asset}")
-    except: st.write("Analisi news...")
+        
+        # Focus Gold (XAU)
+        gold_news = [a for a in articles if "gold" in (a['title'] or "").lower()]
+        if gold_news:
+            score = analyzer.polarity_scores(gold_news[0]['title'])['compound']
+            st.write(f"**Sentiment Gold:** {score:.2f}")
+            
+            # --- LOGICA AUTOMATICA ---
+            if score >= 0.40:
+                st.success("🚀 SEGNALE FORTE RILEVATO: BUY")
+                # Evita acquisti multipli infiniti nella stessa sessione
+                if 'last_trade' not in st.session_state or st.session_state.last_trade != gold_news[0]['title']:
+                    with st.spinner("Eseguendo acquisto automatico..."):
+                        result = execute_trade("XAU", 25.0) # Compra 25€ di Oro
+                        st.balloons()
+                        st.warning(result)
+                        st.session_state.last_trade = gold_news[0]['title']
+                else:
+                    st.info("Ordine già eseguito per questa notizia.")
+            elif score <= -0.40:
+                st.error("📉 SEGNALE VENDITA RILEVATO")
+            else:
+                st.warning("⚖️ Sentiment Neutro. Nessuna azione.")
+    except: st.write("Analisi flussi...")
 
-with c3:
-    st.header("📰 News Stream")
-    st.write("Connesso ai mercati globali.")
+with c_news:
+    st.header("📰 News")
+    # (News feed solito qui...)
