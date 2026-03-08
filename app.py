@@ -3,35 +3,40 @@ import requests
 import pandas as pd
 from datetime import datetime
 from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
-
-# Refresh ogni 10 secondi esatti
 from streamlit_autorefresh import st_autorefresh
+
+# Refresh ogni 10 secondi per dati reali
 st_autorefresh(interval=10 * 1000, key="datarefresh")
 
 st.set_page_config(page_title="Edoardo LIVE Terminal", layout="wide")
 
-# --- FUNZIONE CONNESSIONE API ETORO ---
-def get_etoro_real_data():
-    api_key = st.secrets.get("eyJjaSI6IjYwY2FiYjBiLTU1OTctNDQ4NS04ZjYzLTdlOWUwNTZlMGJiOCIsImVhbiI6IlVucmVnaXN0ZXJlZEFwcGxpY2F0aW9uIiwiZWsiOiJyNEU1OEc0QmJXV2xvYmtQTFZUd3ZFN0UxamE1aVJvNC1uRjVsNUVKdWhGdTZCeFNObGdSbERsLlpsN01ic0tPcWJZdUR4emk1dEFNdDhNUHFGRWU5TVVJR3E3LmpGTkVKNnVjdXZra2U0NF8ifQ__")
-    acc_id = st.secrets.get("EdoardoCegna984")
-    
-    if not api_key:
-        # Fallback se la chiave non è ancora nei secrets
-        return {"balance": 56.95, "assets": [{"name": "GOLD", "val": 56.43, "p": -0.91}]}
-    
-    # Tentativo di chiamata reale
-    headers = {"Authorization": f"Bearer {api_key}"}
-    url = f"https://api.etoro.com/v1/accounts/{acc_id}/positions"
-    try:
-        r = requests.get(url, headers=headers, timeout=5)
-        return r.json()
-    except:
-        return {"balance": 56.95, "assets": [{"name": "GOLD", "val": 56.43, "p": -0.91}]}
+# Recupero credenziali dai Secrets
+ETORO_API_KEY = st.secrets.get("eyJjaSI6IjYwY2FiYjBiLTU1OTctNDQ4NS04ZjYzLTdlOWUwNTZlMGJiOCIsImVhbiI6IlVucmVnaXN0ZXJlZEFwcGxpY2F0aW9uIiwiZWsiOiJyNEU1OEc0QmJXV2xvYmtQTFZUd3ZFN0UxamE1aVJvNC1uRjVsNUVKdWhGdTZCeFNObGdSbERsLlpsN01ic0tPcWJZdUR4emk1dEFNdDhNUHFGRWU5TVVJR3E3LmpGTkVKNnVjdXZra2U0NF8ifQ__")
+ETORO_ACCOUNT_ID = st.secrets.get("EdoardoCegna984")
+NEWS_API_KEY = st.secrets.get("f47b85db22664beba249feed052403c3")
 
-# --- LOGICA AI & NEWS ---
+# --- CHIAMATA REALE ETORO ---
+def get_etoro_live_data():
+    if not ETORO_API_KEY or not ETORO_ACCOUNT_ID:
+        return None
+    
+    headers = {"Authorization": f"Bearer {ETORO_API_KEY}", "Content-Type": "application/json"}
+    # Endpoint per saldo e posizioni aperte
+    url_balance = f"https://api.etoro.com/v1/accounts/{ETORO_ACCOUNT_ID}/balance"
+    url_positions = f"https://api.etoro.com/v1/accounts/{ETORO_ACCOUNT_ID}/positions"
+    
+    try:
+        # Recupero Saldo
+        res_b = requests.get(url_balance, headers=headers, timeout=5).json()
+        # Recupero Posizioni (es. il tuo Gold XAU/USD)
+        res_p = requests.get(url_positions, headers=headers, timeout=5).json()
+        return {"balance": res_b.get('balance'), "positions": res_p.get('positions', [])}
+    except:
+        return None
+
+# --- ANALISI NEWS ---
 def get_market_intelligence(asset):
-    news_key = st.secrets.get("NEWS_API_KEY")
-    url = f"https://newsapi.org/v2/everything?q={asset}&apiKey={news_key}&language=en&sortBy=publishedAt"
+    url = f"https://newsapi.org/v2/everything?q={asset}&apiKey={NEWS_API_KEY}&language=en&sortBy=publishedAt"
     try:
         r = requests.get(url).json()
         articles = r.get('articles', [])[:5]
@@ -40,37 +45,37 @@ def get_market_intelligence(asset):
         return score, articles
     except: return 0, []
 
-# --- INTERFACCIA ---
+# --- INTERFACCIA A TRE COLONNE ---
 col_assets, col_ai, col_news = st.columns([1, 1.2, 1])
 
-# SINISTRA: I TUOI ASSET (Dati estratti dal PDF e API )
+# COLONNA 1: I MIEI ASSET (Dati API)
 with col_assets:
     st.header("💰 I Miei Asset")
-    data = get_etoro_real_data()
-    st.metric("Saldo Totale", f"${data['balance']}")
-    for asset in data.get('assets', []):
-        st.metric(f"Position: {asset['name']}", f"${asset['val']}", f"{asset['p']}%")
-    st.caption(f"Aggiornato alle: {datetime.now().strftime('%H:%M:%S')}")
+    live_data = get_etoro_live_data()
+    
+    if live_data:
+        st.metric("Saldo Totale LIVE", f"${live_data['balance']}")
+        for pos in live_data['positions']:
+            st.metric(f"{pos['displaySymbol']}", f"${pos['currentValue']}", f"{pos['profitPercentage']}%")
+    else:
+        st.error("API eToro non connessa. Controlla i Secrets.")
+        # Visualizziamo l'ultimo dato noto solo come riferimento se l'API fallisce
+        st.info(f"Ultimo dato registrato: $56.95") 
 
-# CENTRO: PAPABILI ACQUISTI (In base a News + Trend)
+# COLONNA 2: PAPABILI ACQUISTO
 with col_ai:
-    st.header("🎯 Papabili Acquisto")
-    watch_list = ["Bitcoin", "S&P 500", "Gold", "NVIDIA"]
-    for item in watch_list:
-        score, _ = get_market_intelligence(item)
-        with st.container():
-            if score > 0.2:
-                st.success(f"**{item}** - Segnale: ACQUISTA (Sent: {score:.2f})")
-            elif score < -0.2:
-                st.error(f"**{item}** - Segnale: VENDI (Sent: {score:.2f})")
-            else:
-                st.info(f"**{item}** - Segnale: ATTENDI (Sent: {score:.2f})")
+    st.header("🎯 Segnali Operativi")
+    for asset in ["Bitcoin", "Gold", "NVIDIA"]:
+        score, _ = get_market_intelligence(asset)
+        st.write(f"**{asset}**")
+        if score > 0.2: st.success(f"SENTIMENT: POSITIVO ({score:.2f})")
+        elif score < -0.2: st.error(f"SENTIMENT: NEGATIVO ({score:.2f})")
+        else: st.warning(f"SENTIMENT: NEUTRALE ({score:.2f})")
 
-# DESTRA: NEWS LIVE
+# COLONNA 3: NEWS FEED
 with col_news:
     st.header("📰 News Feed")
     _, news = get_market_intelligence("market")
-    for n in news[:6]:
+    for n in news:
         st.markdown(f"**{n['title']}**")
-        st.caption(f"{n['source']['name']} | [Link]({n['url']})")
-        st.divider()
+        st.caption(f"[Link alla notizia]({n['url']})")
